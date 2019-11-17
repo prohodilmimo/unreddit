@@ -1,9 +1,11 @@
 # Unreddit Telegram bot
 
-
+Convenience bot for sharing reddit links into Telegram chats.
 
 Gets the media from reddit links shared into the chat, and embeds it properly 
 in the messages for your friends who are too lazy to open the browser or install the app.
+
+Author's implementation: [@unreddit_bot](https://t.me/unreddit_bot).
 
 #### Prerequisites
 
