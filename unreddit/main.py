@@ -49,6 +49,7 @@ async def unlink(message: Message):
 
         post_hint = post_data.get("post_hint")
         is_video = post_data.get("is_video", False)
+        is_nsfw = post_data.get("over_18", False)
 
         if post_hint is None and not is_video:
             continue
@@ -64,6 +65,11 @@ async def unlink(message: Message):
 
             await message.reply_photo(image_url, caption=title,
                                       reply_markup=buttons)
+
+        elif is_nsfw and post_hint in ("rich:video", "link"):
+            await message.reply(f"<a href=\"{post_data['url']}\">🔞</a> {title}",
+                                parse_mode="html",
+                                reply_markup=buttons)
 
         # Gfycat (and maybe some other) embeds
         elif post_hint == "rich:video":
