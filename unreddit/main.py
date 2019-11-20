@@ -57,7 +57,6 @@ async def unlink(message: Message):
             video_url = post_data["secure_media"]["reddit_video"]["fallback_url"]
 
             await message.reply_video(video_url, caption=title,
-                                      parse_mode="markdown",
                                       reply_markup=buttons)
 
         elif post_hint == "image":
@@ -68,14 +67,14 @@ async def unlink(message: Message):
 
         # Gfycat (and maybe some other) embeds
         elif post_hint == "rich:video":
-            await message.reply(f"[🎬]({post_data['url']}) {title}",
-                                parse_mode="markdown",
+            await message.reply(f"<a href=\"{post_data['url']}\">🎬</a> {title}",
+                                parse_mode="html",
                                 reply_markup=buttons)
 
         # Links
         elif post_hint == "link":
-            await message.reply(f"[🔗]({post_data['url']}) {title}",
-                                parse_mode="markdown",
+            await message.reply(f"<a href=\"{post_data['url']}\">🔗</a> {title}",
+                                parse_mode="html",
                                 reply_markup=buttons)
 
 
@@ -107,6 +106,7 @@ def main(token: str, headers: Dict):
     dp = Dispatcher(bot)
 
     dp.register_message_handler(unlink, regexp=r"reddit.com/r/\w+/comments")
+    dp.register_message_handler(unlink, regexp=r"reddit.com/comments")
     dp.register_message_handler(unr, regexp=r"(^|\s+)r/\w+")
 
     executor.start_polling(dp, skip_updates=True)
