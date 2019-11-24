@@ -1,6 +1,6 @@
 import logging
+import os
 import re
-from os import path
 from typing import Dict
 from urllib.parse import urlsplit, urlunsplit
 
@@ -34,6 +34,28 @@ async def unlink(message: Message):
             return
 
         op, comments = post
+
+        path = [part for part in path.split("/") if part]
+
+        if len(path) == 6 or len(path) == 4:  # is a link to the comment
+            comment_data = comments["data"]["children"][0]["data"]
+
+            permalink = comment_data["permalink"]
+            sub = comment_data["subreddit_name_prefixed"]
+            body = comment_data["body"]
+
+            buttons = InlineKeyboardMarkup()
+
+            buttons.add(InlineKeyboardButton("Comment", url=urlunsplit((scheme, netloc, permalink, None, None))),
+                        InlineKeyboardButton(sub,       url=urlunsplit((scheme, netloc, sub, None, None))))
+
+            if len(body) > 2048:
+                body = body[:2043] + "\n\n[…]"
+
+            await message.reply(body,
+                                parse_mode="markdown",
+                                reply_markup=buttons)
+            return
 
         post_data = op["data"]["children"][0]["data"]
 
@@ -121,7 +143,7 @@ def main(token: str, headers: Dict):
 if __name__ == '__main__':
     uvloop.install()
 
-    config_path = path.join(path.dirname(path.realpath(__file__)),
+    config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                             "config.json")
 
     with open(config_path, "r") as config_file:
