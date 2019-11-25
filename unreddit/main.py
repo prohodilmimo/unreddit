@@ -8,6 +8,7 @@ import ujson
 import uvloop
 from aiogram import Bot, Dispatcher, executor
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.exceptions import WrongFileIdentifier
 from aiohttp import ClientError
 
 
@@ -46,11 +47,24 @@ async def unlink(message: Message):
 
             buttons = InlineKeyboardMarkup()
 
-            buttons.add(InlineKeyboardButton("Comment", url=urlunsplit((scheme, netloc, permalink, None, None))),
-                        InlineKeyboardButton(sub,       url=urlunsplit((scheme, netloc, sub, None, None))))
+            buttons.add(InlineKeyboardButton("Comment",         url=urlunsplit((scheme, netloc, permalink, None, None))),
+                        InlineKeyboardButton("Original Post",   url=urlunsplit((scheme, netloc, permalink, None, None))),
+                        InlineKeyboardButton(sub,               url=urlunsplit((scheme, netloc, sub, None, None))))
 
-            if len(body) > 2048:
-                body = body[:2043] + "\n\n[…]"
+            if len(body) > 1024:
+                try:
+                    body = body[:(body.rindex("\n", 0, 1021) + 1)] + "\[…]"
+
+                except ValueError:
+                    try:
+                        body = body[:(body.rindex(". ", 0, 1020) + 1)] + " \[…]"
+
+                    except ValueError:
+                        try:
+                            body = body[:(body.rindex(" ", 0, 1021) + 1)] + "\[…]"
+
+                        except ValueError:
+                            body = body[:1019] + "\n\n\[…]"
 
             await message.reply(body,
                                 parse_mode="markdown",
@@ -58,6 +72,9 @@ async def unlink(message: Message):
             return
 
         post_data = op["data"]["children"][0]["data"]
+
+        if "crosspost_parent_list" in post_data:
+            post_data = post_data["crosspost_parent_list"][0]
 
         title = post_data["title"]
         permalink = post_data["permalink"]
@@ -79,8 +96,13 @@ async def unlink(message: Message):
         if is_video:
             video_url = post_data["secure_media"]["reddit_video"]["fallback_url"]
 
-            await message.reply_video(video_url, caption=title,
-                                      reply_markup=buttons)
+            try:
+                await message.reply_video(video_url, caption=title,
+                                          reply_markup=buttons)
+
+            except WrongFileIdentifier:
+                await message.reply("🚫 Telegram wasn't able to embed the video",
+                                    reply_markup=buttons)
 
         elif post_hint == "image":
             image_url = post_data["preview"]["images"][0]["source"]["url"].replace("&amp;", "&")
