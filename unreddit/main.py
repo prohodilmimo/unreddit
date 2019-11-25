@@ -38,17 +38,20 @@ async def unlink(message: Message):
 
         path = [part for part in path.split("/") if part]
 
+        post_data = op["data"]["children"][0]["data"]
+
         if len(path) == 6 or len(path) == 4:  # is a link to the comment
             comment_data = comments["data"]["children"][0]["data"]
 
             permalink = comment_data["permalink"]
+            post_permalink = post_data["permalink"]
             sub = comment_data["subreddit_name_prefixed"]
             body = comment_data["body"]
 
             buttons = InlineKeyboardMarkup()
 
             buttons.add(InlineKeyboardButton("Comment",         url=urlunsplit((scheme, netloc, permalink, None, None))),
-                        InlineKeyboardButton("Original Post",   url=urlunsplit((scheme, netloc, permalink, None, None))),
+                        InlineKeyboardButton("Original Post",   url=urlunsplit((scheme, netloc, post_permalink, None, None))),
                         InlineKeyboardButton(sub,               url=urlunsplit((scheme, netloc, sub, None, None))))
 
             if len(body) > 1024:
@@ -70,8 +73,6 @@ async def unlink(message: Message):
                                 parse_mode="markdown",
                                 reply_markup=buttons)
             return
-
-        post_data = op["data"]["children"][0]["data"]
 
         if "crosspost_parent_list" in post_data:
             post_data = post_data["crosspost_parent_list"][0]
