@@ -8,7 +8,7 @@ import ujson
 import uvloop
 from aiogram import Bot, Dispatcher, executor
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.exceptions import WrongFileIdentifier
+from aiogram.utils.exceptions import WrongFileIdentifier, BadRequest
 from aiohttp import ClientError
 
 
@@ -107,6 +107,21 @@ async def unlink(message: Message):
 
         elif post_hint == "image":
             image_url = post_data["preview"]["images"][0]["source"]["url"].replace("&amp;", "&")
+
+            if re.search(r"\.gif", image_url, re.I):
+                try:
+                    image_url = post_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"]
+                    await message.reply_animation(image_url, caption=title,
+                                                  reply_markup=buttons)
+                    return
+
+                except BadRequest:
+                    await message.reply("🚫 Telegram wasn't able to embed the animation",
+                                        reply_markup=buttons)
+                    return
+
+                except (IndexError, KeyError):
+                    pass
 
             await message.reply_photo(image_url, caption=title,
                                       reply_markup=buttons)
