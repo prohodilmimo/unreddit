@@ -88,10 +88,11 @@ async def unlink(message: Message):
                     InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None))))
 
         post_hint = post_data.get("post_hint")
+        is_reddit_media = post_data.get("is_reddit_media_domain", False)
         is_video = post_data.get("is_video", False)
         is_nsfw = post_data.get("over_18", False)
 
-        if post_hint is None and not is_video:
+        if post_hint is None and not is_reddit_media:
             continue
 
         if is_video:
@@ -109,8 +110,13 @@ async def unlink(message: Message):
                 logging.getLogger().warning(f"Video {video_url} "
                                             f"has failed to embed: {e}")
 
-        elif post_hint == "image":
-            image_url = post_data["preview"]["images"][0]["source"]["url"].replace("&amp;", "&")
+        elif post_hint == "image" or (post_hint is None and is_reddit_media):
+            image_url = post_data["url"]
+
+            if post_hint is not None:
+                image_url = post_data["preview"]["images"][0]["source"]["url"]
+
+            image_url = image_url.replace("&amp;", "&")
 
             if re.search(r"\.gif", image_url, re.I):
                 try:
@@ -131,8 +137,17 @@ async def unlink(message: Message):
                 except (IndexError, KeyError):
                     pass
 
-            await message.reply_photo(image_url, caption=title,
-                                      reply_markup=buttons)
+            try:
+                await message.reply_photo(image_url, caption=title,
+                                          reply_markup=buttons)
+
+            except BadRequest as e:
+                await message.reply(f"<a href=\"{image_url}\">🖼 {title}</a>\n\n"
+                                    f"[Telegram wasn't able to embed the image]",
+                                    parse_mode="html",
+                                    reply_markup=buttons)
+                logging.getLogger().warning(f"Image {image_url} "
+                                            f"has failed to embed: {e}")
 
         elif is_nsfw and post_hint in ("rich:video", "link"):
             await message.reply(f"<a href=\"{post_data['url']}\">🔞</a> {title}",
