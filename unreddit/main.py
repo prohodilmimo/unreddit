@@ -8,7 +8,7 @@ import ujson
 import uvloop
 from aiogram import Bot, Dispatcher, executor
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.exceptions import WrongFileIdentifier, BadRequest
+from aiogram.utils.exceptions import BadRequest
 from aiohttp import ClientError
 
 
@@ -101,9 +101,13 @@ async def unlink(message: Message):
                 await message.reply_video(video_url, caption=title,
                                           reply_markup=buttons)
 
-            except WrongFileIdentifier:
-                await message.reply("🚫 Telegram wasn't able to embed the video",
+            except BadRequest as e:
+                await message.reply(f"<a href=\"{video_url}\">🎬 {title}</a>\n\n"
+                                    f"[Telegram wasn't able to embed the video]",
+                                    parse_mode="html",
                                     reply_markup=buttons)
+                logging.getLogger().warning(f"Video {video_url} "
+                                            f"has failed to embed: {e}")
 
         elif post_hint == "image":
             image_url = post_data["preview"]["images"][0]["source"]["url"].replace("&amp;", "&")
@@ -115,9 +119,13 @@ async def unlink(message: Message):
                                                   reply_markup=buttons)
                     return
 
-                except BadRequest:
-                    await message.reply("🚫 Telegram wasn't able to embed the animation",
+                except BadRequest as e:
+                    await message.reply(f"<a href=\"{image_url}\">🎬 {title}</a>\n\n"
+                                        f"[Telegram wasn't able to embed the animation]",
+                                        parse_mode="html",
                                         reply_markup=buttons)
+                    logging.getLogger().warning(f"Animation {image_url} "
+                                                f"has failed to embed: {e}")
                     return
 
                 except (IndexError, KeyError):
@@ -171,7 +179,7 @@ def main(token: str, headers: Dict):
 
     dp = Dispatcher(bot)
 
-    dp.register_message_handler(unlink, regexp=r"reddit.com/r/\w+/comments")
+    dp.register_message_handler(unlink, regexp=r"reddit.com/(r|u|user)/\w+/comments")
     dp.register_message_handler(unlink, regexp=r"reddit.com/comments")
     dp.register_message_handler(unr, regexp=r"(^|\s+)r/\w+")
 
