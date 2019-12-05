@@ -3,5 +3,9 @@
 
   "headers": {
     "User-agent": ""
+  },
+
+  "imgur": {
+    "client_id": ""
   }
 }

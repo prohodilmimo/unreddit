@@ -1,31 +1,35 @@
 import logging
 import os
 import re
-from typing import Dict
+from typing import Dict, List, Pattern, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 import ujson
 import uvloop
 from aiogram import Bot, Dispatcher, executor
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (Message, InlineKeyboardMarkup, InlineKeyboardButton,
+                           InputMedia)
 from aiogram.utils.exceptions import BadRequest
 from aiohttp import ClientError
 
 
-async def unlink(message: Message):
+def get_urls(text: str, domain_constraint: Pattern) -> str:
     urls = re.findall(
         "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
-        message.text
+        text
     )
 
     for url in urls:
         scheme, netloc, path, *_ = urlsplit(url)
 
-        if not netloc.endswith("reddit.com"):
+        if not re.search(domain_constraint, netloc):
             continue
 
-        url = urlunsplit((scheme, netloc, path, None, None))
+        yield urlunsplit((scheme, netloc, path, None, None))
 
+
+async def unlink(message: Message):
+    for url in get_urls(message.text, re.compile(r"reddit\.com$")):
         try:
             async with message.bot.session.get(url + ".json") as response:
                 post = await response.json(loads=ujson.loads)
@@ -43,16 +47,9 @@ async def unlink(message: Message):
         if len(path) == 6 or len(path) == 4:  # is a link to the comment
             comment_data = comments["data"]["children"][0]["data"]
 
-            permalink = comment_data["permalink"]
-            post_permalink = post_data["permalink"]
-            sub = comment_data["subreddit_name_prefixed"]
             body = comment_data["body"]
 
-            buttons = InlineKeyboardMarkup()
-
-            buttons.add(InlineKeyboardButton("Comment",         url=urlunsplit((scheme, netloc, permalink, None, None))),
-                        InlineKeyboardButton("Original Post",   url=urlunsplit((scheme, netloc, post_permalink, None, None))),
-                        InlineKeyboardButton(sub,               url=urlunsplit((scheme, netloc, sub, None, None))))
+            buttons = generate_buttons(url, post_data, comment_data)
 
             if len(body) > 1024:
                 try:
@@ -78,14 +75,8 @@ async def unlink(message: Message):
             post_data = post_data["crosspost_parent_list"][0]
 
         title = post_data["title"]
-        permalink = post_data["permalink"]
-        sub = post_data["subreddit_name_prefixed"]
-        author = "u/" + post_data["author"]
 
-        buttons = InlineKeyboardMarkup()
-
-        buttons.add(InlineKeyboardButton("Original Post", url=urlunsplit((scheme, netloc, permalink, None, None))),
-                    InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None))))
+        buttons = generate_buttons(url, post_data)
 
         post_hint = post_data.get("post_hint")
         is_reddit_media = post_data.get("is_reddit_media_domain", False)
@@ -98,63 +89,51 @@ async def unlink(message: Message):
         if is_video:
             video_url = post_data["secure_media"]["reddit_video"]["fallback_url"]
 
-            try:
-                await message.reply_video(video_url, caption=title,
-                                          reply_markup=buttons)
-
-            except BadRequest as e:
-                await message.reply(f"<a href=\"{video_url}\">🎬 {title}</a>\n\n"
-                                    f"[Telegram wasn't able to embed the video]",
-                                    parse_mode="html",
-                                    reply_markup=buttons)
-                logging.getLogger().warning(f"Video {video_url} "
-                                            f"has failed to embed: {e}")
+            await send_video(video_url, message, title, buttons)
 
         elif post_hint == "image" or (post_hint is None and is_reddit_media):
             image_url = post_data["url"]
 
-            if post_hint is not None:
+            is_gif = re.search(r"\.gif", image_url, re.I)
+
+            if post_hint is not None and is_gif:
+                image_url = post_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"]
+
+            elif post_hint is not None:
                 image_url = post_data["preview"]["images"][0]["source"]["url"]
 
             image_url = image_url.replace("&amp;", "&")
 
-            if re.search(r"\.gif", image_url, re.I):
-                try:
-                    image_url = post_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"]
-                    await message.reply_animation(image_url, caption=title,
-                                                  reply_markup=buttons)
-                    return
+            if is_gif:
+                await send_animation(image_url, message, title, buttons)
 
-                except BadRequest as e:
-                    await message.reply(f"<a href=\"{image_url}\">🎬 {title}</a>\n\n"
-                                        f"[Telegram wasn't able to embed the animation]",
-                                        parse_mode="html",
-                                        reply_markup=buttons)
-                    logging.getLogger().warning(f"Animation {image_url} "
-                                                f"has failed to embed: {e}")
-                    return
+            else:
+                await send_image(image_url, message, title, buttons)
 
-                except (IndexError, KeyError):
-                    pass
-
+        elif re.search("imgur\.com", post_data['url']):
             try:
-                await message.reply_photo(image_url, caption=title,
-                                          reply_markup=buttons)
+                await send_imgur(post_data['url'], message, title, buttons)
 
-            except BadRequest as e:
-                await message.reply(f"<a href=\"{image_url}\">🖼 {title}</a>\n\n"
-                                    f"[Telegram wasn't able to embed the image]",
+            except ValueError:
+                await message.reply(f"<a href=\"{post_data['url']}\">🔗</a> {title}",
                                     parse_mode="html",
                                     reply_markup=buttons)
-                logging.getLogger().warning(f"Image {image_url} "
-                                            f"has failed to embed: {e}")
 
-        elif is_nsfw and post_hint in ("rich:video", "link"):
+        elif re.search("gfycat\.com", post_data['url']):
+            try:
+                await send_gfycat(post_data['url'], message, title, buttons)
+
+            except ValueError:
+                await message.reply(f"<a href=\"{post_data['url']}\">🔗</a> {title}",
+                                    parse_mode="html",
+                                    reply_markup=buttons)
+
+        elif is_nsfw and post_hint == "rich:video":
             await message.reply(f"<a href=\"{post_data['url']}\">🔞</a> {title}",
                                 parse_mode="html",
                                 reply_markup=buttons)
 
-        # Gfycat (and maybe some other) embeds
+        # Video embeds
         elif post_hint == "rich:video":
             await message.reply(f"<a href=\"{post_data['url']}\">🎬</a> {title}",
                                 parse_mode="html",
@@ -165,6 +144,185 @@ async def unlink(message: Message):
             await message.reply(f"<a href=\"{post_data['url']}\">🔗</a> {title}",
                                 parse_mode="html",
                                 reply_markup=buttons)
+
+
+def generate_buttons(url: str, post_data: Dict, comment_data: Dict = None
+                     ) -> InlineKeyboardMarkup:
+    scheme, netloc, path, *_ = urlsplit(url)
+
+    permalink = post_data["permalink"]
+    sub = post_data["subreddit_name_prefixed"]
+
+    buttons = InlineKeyboardMarkup()
+
+    buttons.add(InlineKeyboardButton("Original Post", url=urlunsplit((scheme, netloc, permalink, None, None))),
+                InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None))))
+
+    if comment_data is None:
+        author = "u/" + post_data["author"]
+
+    else:
+        comment_permalink = comment_data["permalink"]
+        author = "u/" + comment_data["author"]
+
+        buttons.add(InlineKeyboardButton("Comment", url=urlunsplit((scheme, netloc, comment_permalink, None, None))))
+
+    return buttons
+
+
+async def send_gfycat(url, message: Message, title: Optional[str],
+                      buttons: Optional[InlineKeyboardMarkup]) -> None:
+    scheme, netloc, path, *_ = urlsplit(url)
+
+    post_id, *_ = path[1:].split("-")
+
+    async with message.bot.session.get(f"https://api.gfycat.com/v1/gfycats/{post_id}") as response:
+        if response.status != 200:
+            raise ValueError
+
+        data = await response.json(loads=ujson.loads)
+
+    if title is None:
+        title = data["gfyItem"]["title"] or None
+
+    if data["gfyItem"]["hasAudio"]:
+        await send_video(data["gfyItem"]["mp4Url"], message, title, buttons)
+
+    else:
+        await send_animation(data["gfyItem"]["gifUrl"], message, title, buttons)
+
+
+async def send_imgur(url, message: Message, title: Optional[str],
+                     buttons: Optional[InlineKeyboardMarkup]) -> None:
+    scheme, netloc, path, *_ = urlsplit(url)
+
+    if re.match(r"/gallery/\w+", path):
+        *_, post_id = path.split("/")
+        async with message.bot.session.get(f"https://api.imgur.com/3/album/{post_id}") as response:
+            if response.status != 200:
+                raise ValueError
+
+            data = await response.json(loads=ujson.loads)
+
+        media = []
+
+        for image in data["data"]["images"]:
+            if image["title"] and image["description"]:
+                caption = f"{image['title']}\n\n{image['description']}"
+
+            elif image["title"]:
+                caption = image["title"]
+
+            elif image["description"]:
+                caption = image["description"]
+
+            else:
+                caption = None
+
+            if image["type"] in ("image/gif", "video/mp4"):
+                media.append(
+                    InputMedia(media=image["mp4"],
+                               type="video",
+                               caption=caption)
+                )
+
+            elif image["type"] in ("image/png", "image/jpeg"):
+                media.append(
+                    InputMedia(media=image["link"],
+                               type="photo",
+                               caption=caption)
+                )
+
+        if title is None:
+            title = data["data"]["title"] or None
+
+        await send_album(media, url, message, title, buttons)
+
+    else:
+        post_id, *_ = path[1:].split(".")
+
+        async with message.bot.session.get(f"https://api.imgur.com/3/image/{post_id}") as response:
+            if response.status != 200:
+                raise ValueError
+
+            data = await response.json(loads=ujson.loads)
+
+        if title is None:
+            title = data["data"]["title"] or None
+
+        if data["data"]["type"] in ("image/gif", "video/mp4"):
+            await send_video(data["data"]["mp4"], message, title, buttons)
+
+        elif data["data"]["type"] in ("image/png", "image/jpeg"):
+            await send_image(data["data"]["link"], message, title, buttons)
+
+
+async def send_album(media: List[InputMedia], fallback_url: str,
+                     message: Message, title: str,
+                     buttons: InlineKeyboardMarkup) -> None:
+    try:
+        album_messages = await message.reply_media_group(media)
+
+        # TODO: make it work
+        # if album_messages:
+        #     await album_messages[0].edit_reply_markup(buttons)
+        await album_messages[0].reply(title, reply_markup=buttons)
+
+    except BadRequest as e:
+        await message.reply(f"<a href=\"{fallback_url}\">🔗</a> {title}\n\n"
+                            f"[Telegram wasn't able to embed the album]",
+                            parse_mode="html",
+                            reply_markup=buttons)
+
+        logging.getLogger().warning(f"Album {fallback_url} "
+                                    f"has failed to embed: {e}")
+
+
+async def send_animation(animation_url: str, message: Message, title: str,
+                         buttons: InlineKeyboardMarkup) -> None:
+    try:
+        await message.reply_animation(animation_url, caption=title,
+                                      reply_markup=buttons)
+        return
+
+    except BadRequest as e:
+        await message.reply(f"<a href=\"{animation_url}\">🎬 {title}</a>\n\n"
+                            f"[Telegram wasn't able to embed the animation]",
+                            parse_mode="html",
+                            reply_markup=buttons)
+        logging.getLogger().warning(f"Animation {animation_url} "
+                                    f"has failed to embed: {e}")
+        return
+
+
+async def send_video(video_url: str, message: Message, title: str,
+                     buttons: InlineKeyboardMarkup) -> None:
+    try:
+        await message.reply_video(video_url, caption=title,
+                                  reply_markup=buttons)
+
+    except BadRequest as e:
+        await message.reply(f"<a href=\"{video_url}\">🎬 {title}</a>\n\n"
+                            f"[Telegram wasn't able to embed the video]",
+                            parse_mode="html",
+                            reply_markup=buttons)
+        logging.getLogger().warning(f"Video {video_url} "
+                                    f"has failed to embed: {e}")
+
+
+async def send_image(image_url: str, message: Message, title: str,
+                     buttons: InlineKeyboardMarkup) -> None:
+    try:
+        await message.reply_photo(image_url, caption=title,
+                                  reply_markup=buttons)
+
+    except BadRequest as e:
+        await message.reply(f"<a href=\"{image_url}\">🖼 {title}</a>\n\n"
+                            f"[Telegram wasn't able to embed the image]",
+                            parse_mode="html",
+                            reply_markup=buttons)
+        logging.getLogger().warning(f"Image {image_url} "
+                                    f"has failed to embed: {e}")
 
 
 async def unr(message: Message):
@@ -186,10 +344,13 @@ async def unr(message: Message):
                             disable_web_page_preview=True)
 
 
-def main(token: str, headers: Dict):
+def main(token: str, headers: Dict, imgur: Dict):
     logging.basicConfig(level=logging.INFO)
 
     bot = Bot(token=token)
+
+    headers["Authorization"] = f"Client-ID {imgur.get('client_id')}"
+
     bot.session._default_headers = headers
 
     dp = Dispatcher(bot)
