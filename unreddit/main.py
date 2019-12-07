@@ -30,6 +30,8 @@ def get_urls(text: str, domain_constraint: Pattern) -> str:
 
 async def unlink(message: Message):
     for url in get_urls(message.text, re.compile(r"reddit\.com$")):
+        scheme, netloc, path, *_ = urlsplit(url)
+
         try:
             async with message.bot.session.get(url + ".json") as response:
                 post = await response.json(loads=ujson.loads)
