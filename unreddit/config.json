@@ -1,11 +1,17 @@
 {
   "token": "",
 
-  "headers": {
-    "User-agent": ""
+  "reddit": {
+    "headers": {
+      "User-agent": ""
+    }
   },
 
   "imgur": {
     "client_id": ""
+  },
+
+  "gfycat": {
+
   }
 }
