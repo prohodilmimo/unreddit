@@ -1,13 +1,13 @@
 import logging
 import os
 import re
-from typing import Dict
+from typing import Dict, Union
 from urllib.parse import urlsplit, urlunsplit
 
 import ujson
 import uvloop
 from aiogram import Bot, Dispatcher, executor
-from aiogram.types import Message
+from aiogram.types import Message, InlineQuery
 from aiohttp import ClientError
 
 from unreddit.api_reply import *
@@ -25,8 +25,17 @@ def get_urls(text: str) -> str:
         yield urlunsplit((scheme, netloc, path, None, None))
 
 
-async def unreddit(message: Message):
-    for url in get_urls(message.text):
+async def unreddit(trigger: Union[Message, InlineQuery]):
+    if isinstance(trigger, Message):
+        text = trigger.text
+
+    elif isinstance(trigger, InlineQuery):
+        text = trigger.query
+
+    else:
+        return
+
+    for url in get_urls(text):
         if not APIReply.REDDIT_REGEXP.search(url):
             continue
 
@@ -35,7 +44,11 @@ async def unreddit(message: Message):
         path = [part for part in path.split("/") if part]
 
         if len(path) == 6 or len(path) == 4:  # is a link to the comment
-            reply = RedditCommentReply(message)
+            try:
+                reply = RedditCommentReply(trigger)
+
+            except ValueError:
+                continue
 
             try:
                 await reply.attach_from_reddit_comment(url)
@@ -46,7 +59,7 @@ async def unreddit(message: Message):
                 continue
 
         else:
-            reply = APIReply(message)
+            reply = APIReply(trigger)
 
             try:
                 await reply.attach_from_reddit(url)
@@ -94,6 +107,8 @@ def main(token: str, reddit: Dict, imgur: Dict, gfycat: Dict):
 
     dp.register_message_handler(unreddit, regexp=APIReply.REDDIT_REGEXP)
     dp.register_message_handler(unr, regexp=r"(^|\s+)r/\w+")
+
+    dp.register_inline_handler(unreddit)
 
     executor.start_polling(dp, skip_updates=True)
 

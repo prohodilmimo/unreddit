@@ -1,5 +1,5 @@
 import re
-from typing import Dict
+from typing import Dict, Union
 from urllib.parse import urlsplit, urlunsplit
 
 import ujson
@@ -18,8 +18,8 @@ class APIReply(Reply):
     IMGUR_REGEXP = re.compile(r"imgur\.com")
     GFYCAT_REGEXP = re.compile(r"gfycat\.com")
 
-    def __init__(self, message: Message):
-        Reply.__init__(self, message, None, None, "html")
+    def __init__(self, trigger: Union[Message, InlineQuery]):
+        Reply.__init__(self, trigger, None, None, "html")
 
     async def attach_from_reddit(self, url: str, follow_crossposts=False) -> None:
         async with self.bot.session.get(url + ".json",
@@ -214,8 +214,11 @@ class APIReply(Reply):
 
 
 class RedditCommentReply(Reply):
-    def __init__(self, message: Message):
-        Reply.__init__(self, message, None, None, "markdown")
+    def __init__(self, trigger: Union[Message, InlineQuery]):
+        if not isinstance(trigger, Message):
+            raise ValueError
+
+        Reply.__init__(self, trigger, None, None, "markdown")
 
     async def attach_from_reddit_comment(self, url):
         async with self.bot.session.get(url + ".json",
