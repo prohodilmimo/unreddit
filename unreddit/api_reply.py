@@ -6,7 +6,7 @@ import ujson
 from aiogram.types import *
 from aiohttp import ClientError
 
-from unreddit.reply import Reply
+from reply import Reply
 
 
 class MediaNotFoundError(Exception):

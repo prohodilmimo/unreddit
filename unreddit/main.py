@@ -10,7 +10,7 @@ from aiogram import Bot, Dispatcher, executor
 from aiogram.types import Message, InlineQuery
 from aiohttp import ClientError
 
-from unreddit.api_reply import *
+from api_reply import *
 
 
 def get_urls(text: str) -> str:
