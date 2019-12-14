@@ -82,6 +82,13 @@ async def unr(message: Message):
             async with message.bot.session.get(f"https://www.reddit.com/{sub}.json",
                                                allow_redirects=False) as response:
                 if response.status == 200:
+                    data = await response.json()
+
+                    posts: list = data["data"]["children"]
+
+                    if posts:
+                        sub = posts[0]["data"]["subreddit_name_prefixed"]
+
                     links.add(f"[{sub}](https://www.reddit.com/{sub})")
 
         except ClientError as e:
