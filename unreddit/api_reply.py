@@ -241,10 +241,10 @@ def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
     permalink = post_data["permalink"]
     sub = post_data["subreddit_name_prefixed"]
 
-    buttons = InlineKeyboardMarkup()
-
-    buttons.add(InlineKeyboardButton("Original Post", url=urlunsplit((scheme, netloc, permalink, None, None))),
-                InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None))))
+    buttons = [
+        InlineKeyboardButton("Original Post", url=urlunsplit((scheme, netloc, permalink, None, None))),
+        InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None)))
+    ]
 
     if comment_data is None:
         author = "u/" + post_data["author"]
@@ -253,9 +253,9 @@ def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
         comment_permalink = comment_data["permalink"]
         author = "u/" + comment_data["author"]
 
-        buttons.add(InlineKeyboardButton("Comment", url=urlunsplit((scheme, netloc, comment_permalink, None, None))))
+        buttons.append(InlineKeyboardButton("Comment", url=urlunsplit((scheme, netloc, comment_permalink, None, None))))
 
-    return buttons
+    return InlineKeyboardMarkup().add(*buttons)
 
 
 __all__ = ["APIReply", "RedditCommentReply", "MediaNotFoundError"]
