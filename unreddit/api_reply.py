@@ -21,7 +21,7 @@ class APIReply(Reply):
     def __init__(self, trigger: Union[Message, InlineQuery]):
         Reply.__init__(self, trigger, None, None, "html")
 
-    async def attach_from_reddit(self, url: str, follow_crossposts=False) -> None:
+    async def attach_from_reddit(self, url: str) -> None:
         async with self.bot.session.get(url + ".json",
                                         raise_for_status=True) as response:
             data = await response.json(loads=ujson.loads)
@@ -30,19 +30,19 @@ class APIReply(Reply):
 
         post_data = op["data"]["children"][0]["data"]
 
-        if follow_crossposts and "crosspost_parent_list" in post_data:
+        title = post_data.get("title", None)
+        self.set_reply_markup(generate_reddit_buttons(url, post_data))
+
+        if "crosspost_parent_list" in post_data:
             post_data = post_data["crosspost_parent_list"][0]
 
         post_hint = post_data.get("post_hint")
 
-        title = post_data.get("title", None)
         thumbnail = post_data.get("thumbnail", None)
 
         is_reddit_media = post_data.get("is_reddit_media_domain", False)
         is_video = post_data.get("is_video", False)
         is_nsfw = post_data.get("over_18", False)
-
-        self.set_reply_markup(generate_reddit_buttons(url, post_data))
 
         if not thumbnail or thumbnail == "default":
             thumbnail = None
