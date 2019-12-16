@@ -94,12 +94,16 @@ class APIReply(Reply):
             try:
                 await self.attach_from_imgur(post_data['url'])
 
+                self.set_caption(title)
+
             except ClientError:
                 self.attach_link(post_data["url"], title, icon="🖼")
 
         elif self.GFYCAT_REGEXP.search(post_data['url']):
             try:
                 await self.attach_from_gfycat(post_data['url'])
+
+                self.set_caption(title)
 
             except ClientError:
                 self.attach_link(post_data["url"], title, icon="🎬")

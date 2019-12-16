@@ -31,6 +31,9 @@ class Reply:
     def bot(self) -> Bot:
         return self.__trigger.bot
 
+    def set_caption(self, value: str) -> None:
+        self.__caption = value
+
     def set_reply_markup(self, value: InlineKeyboardMarkup) -> None:
         self.__reply_markup = value
 
