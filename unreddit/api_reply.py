@@ -41,13 +41,17 @@ class APIReply(Reply):
         thumbnail = post_data.get("thumbnail", None)
 
         is_reddit_media = post_data.get("is_reddit_media_domain", False)
+        is_link_to_imgur = self.IMGUR_REGEXP.search(post_data['url']) is not None
+        is_link_to_gfycat = self.GFYCAT_REGEXP.search(post_data['url']) is not None
         is_video = post_data.get("is_video", False)
         is_nsfw = post_data.get("over_18", False)
 
         if not thumbnail or thumbnail == "default":
             thumbnail = None
 
-        if post_hint is None and not is_reddit_media:
+        if post_hint is None and (not is_reddit_media and
+                                  not is_link_to_imgur and
+                                  not is_link_to_gfycat):
             raise MediaNotFoundError
 
         if is_video:
@@ -90,7 +94,7 @@ class APIReply(Reply):
                                   thumbnail,
                                   title)
 
-        elif self.IMGUR_REGEXP.search(post_data['url']):
+        elif is_link_to_imgur:
             try:
                 await self.attach_from_imgur(post_data['url'])
 
@@ -99,7 +103,7 @@ class APIReply(Reply):
             except ClientError:
                 self.attach_link(post_data["url"], title, icon="🖼")
 
-        elif self.GFYCAT_REGEXP.search(post_data['url']):
+        elif is_link_to_gfycat:
             try:
                 await self.attach_from_gfycat(post_data['url'])
 
