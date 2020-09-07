@@ -41,6 +41,7 @@ class APIReply(Reply):
         thumbnail = post_data.get("thumbnail", None)
 
         is_reddit_media = post_data.get("is_reddit_media_domain", False)
+        is_gallery = post_data.get("media_metadata") is not None
         is_link_to_imgur = self.IMGUR_REGEXP.search(post_data['url']) is not None
         is_link_to_gfycat = self.GFYCAT_REGEXP.search(post_data['url']) is not None
         is_video = post_data.get("is_video", False)
@@ -50,6 +51,7 @@ class APIReply(Reply):
             thumbnail = None
 
         if post_hint is None and (not is_reddit_media and
+                                  not is_gallery and
                                   not is_link_to_imgur and
                                   not is_link_to_gfycat):
             raise MediaNotFoundError
@@ -65,6 +67,31 @@ class APIReply(Reply):
 
             self.attach_video(post_data["secure_media"]["reddit_video"]["fallback_url"],
                               thumbnail,
+                              title)
+
+        elif is_gallery:
+            media = []
+
+            for image in post_data["media_metadata"].values():
+                if image["status"] != "valid":
+                    continue
+
+                if image["m"] in ("image/png", "image/jpg"):
+                    media.append(
+                        InputMedia(media=image["s"]["u"].replace("&amp;", "&"),
+                                   thumb=None,
+                                   type=ContentType.PHOTO)
+                    )
+
+                elif image["m"] == "image/gif":
+                    media.append(
+                        InputMedia(media=image["s"]["u"].replace("&amp;", "&"),
+                                   thumb=None,
+                                   type=ContentType.ANIMATION)
+                    )
+
+            self.attach_album(media,
+                              post_data["url"],
                               title)
 
         elif post_hint == "image" or (post_hint is None and is_reddit_media):
@@ -249,19 +276,23 @@ def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
     permalink = post_data["permalink"]
     sub = post_data["subreddit_name_prefixed"]
 
-    buttons = [
-        InlineKeyboardButton("Original Post", url=urlunsplit((scheme, netloc, permalink, None, None))),
-        InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None)))
-    ]
-
     if comment_data is None:
         author = "u/" + post_data["author"]
+
+        buttons = [
+            InlineKeyboardButton("Original Post", url=urlunsplit((scheme, netloc, permalink, None, None))),
+            InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None)))
+        ]
 
     else:
         comment_permalink = comment_data["permalink"]
         author = "u/" + comment_data["author"]
 
-        buttons.append(InlineKeyboardButton("Comment", url=urlunsplit((scheme, netloc, comment_permalink, None, None))))
+        buttons = [
+            InlineKeyboardButton("Comment",       url=urlunsplit((scheme, netloc, comment_permalink, None, None))),
+            InlineKeyboardButton("Original Post", url=urlunsplit((scheme, netloc, permalink, None, None))),
+            InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None)))
+        ]
 
     return InlineKeyboardMarkup().add(*buttons)
 
