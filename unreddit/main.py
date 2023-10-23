@@ -8,9 +8,14 @@ import ujson
 import uvloop
 from aiogram import Bot, Dispatcher, executor
 from aiogram.types import Message, InlineQuery
-from aiohttp import ClientError
+from aiohttp import ClientError, ClientSession
 
 from api_reply import *
+
+
+def clean_up_url(url):
+    scheme, netloc, path, *_ = urlsplit(url)
+    return urlunsplit((scheme, netloc, path, None, None))
 
 
 def get_urls(text: str) -> str:
@@ -20,9 +25,12 @@ def get_urls(text: str) -> str:
     )
 
     for url in urls:
-        scheme, netloc, path, *_ = urlsplit(url)
+        yield clean_up_url(url)
 
-        yield urlunsplit((scheme, netloc, path, None, None))
+
+async def resolve_opaque_share_url(session: ClientSession, url: str) -> str:
+    async with session.head(url, raise_for_status=True, allow_redirects=False) as response:
+        return clean_up_url(response.headers.get("Location"))
 
 
 async def unreddit(trigger: Union[Message, InlineQuery]):
@@ -36,8 +44,13 @@ async def unreddit(trigger: Union[Message, InlineQuery]):
         return
 
     for url in get_urls(text):
-        if not APIReply.REDDIT_REGEXP.search(url):
+        match = APIReply.REDDIT_REGEXP.search(url)
+
+        if not match:
             continue
+
+        if 's' in match.groups():  # is an opaque share link
+            url = await resolve_opaque_share_url(trigger.bot.session, url)
 
         scheme, netloc, path, *_ = urlsplit(url)
 
