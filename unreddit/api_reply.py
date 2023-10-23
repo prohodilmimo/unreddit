@@ -14,7 +14,7 @@ class MediaNotFoundError(Exception):
 
 
 class APIReply(Reply):
-    REDDIT_REGEXP = re.compile(r"reddit\.com(/(r|u|user)/\w+/|/)comments")
+    REDDIT_REGEXP = re.compile(r"reddit\.com(/(r|u|user)/\w+/|/)(comments|s)")
     IMGUR_REGEXP = re.compile(r"imgur\.com")
     GFYCAT_REGEXP = re.compile(r"gfycat\.com")
 
