@@ -15,6 +15,8 @@ from api_reply import *
 
 def clean_up_url(url):
     scheme, netloc, path, *_ = urlsplit(url)
+    if not netloc.startswith("www"):
+        netloc = "www." + netloc
     return urlunsplit((scheme, netloc, path, None, None))
 
 
