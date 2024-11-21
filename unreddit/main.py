@@ -9,7 +9,8 @@ from aiogram import Bot, Dispatcher, executor
 from aiogram.types import Message, InlineQuery
 from aiohttp import ClientError
 
-from api_reply import MediaNotFoundError, REDDIT_REGEXP, RedditLoader
+from loaders.loader import MediaNotFoundError
+from loaders.reddit import REDDIT_REGEXP, RedditLoader
 from reply import Reply
 from url_utils import find_urls
 

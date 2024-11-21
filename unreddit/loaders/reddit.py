@@ -4,20 +4,13 @@ from typing import Dict, List, Tuple
 from aiohttp import ClientError
 
 from content import *
-from reply import ContentLoader
 from url_utils import repath_url, get_path
-
-
-class MediaNotFoundError(Exception):
-    pass
-
+from .gfycat import GFYCAT_REGEXP, GfyCatLoader
+from .imgur import IMGUR_REGEXP, ImgurLoader
+from .loader import ContentLoader, MediaNotFoundError
 
 REDDIT_REGEXP = re.compile(r"reddit\.com(/(r|u|user)/\w+/|/)(comments|s)")
 REDDIT_API_URL = "https://www.reddit.com"
-IMGUR_REGEXP = re.compile(r"imgur\.com")
-IMGUR_API_URL = "https://api.imgur.com"
-GFYCAT_REGEXP = re.compile(r"gfycat\.com")
-GFYCAT_API_URL = "https://api.gfycat.com"
 
 
 class RedditLoader(ContentLoader):
@@ -168,75 +161,6 @@ class RedditLoader(ContentLoader):
             raise MediaNotFoundError
 
 
-class GfyCatLoader(ContentLoader):
-    async def load(self, url: str) -> Tuple[Content, Metadata]:
-        path = get_path(url)
-
-        post_id, *_ = path[1:].split("-")
-
-        data = await self._load(f"{GFYCAT_API_URL}/v1/gfycats/{post_id}")
-
-        if data["gfyItem"]["hasAudio"]:
-            return Video(data["gfyItem"]["mp4Url"],
-                         data["gfyItem"]["thumb100PosterUrl"],
-                         data["gfyItem"]["title"] or None), \
-                Metadata()
-        else:
-            return Animation(data["gfyItem"]["gifUrl"],
-                             data["gfyItem"]["thumb100PosterUrl"],
-                             data["gfyItem"]["title"] or None), \
-                Metadata()
-
-
-class ImgurLoader(ContentLoader):
-    async def load(self, url: str) -> Tuple[Content, Metadata]:
-        path = get_path(url)
-
-        if re.match(r"/gallery/\w+", path):
-            *_, post_id = path.split("/")
-            data = await self._load(f"{IMGUR_API_URL}/3/album/{post_id}")
-
-            media = []
-
-            for image in data["data"]["images"]:
-                if image["title"] and image["description"]:
-                    caption = f"{image['title']}\n\n{image['description']}"
-
-                elif image["title"]:
-                    caption = image["title"]
-
-                elif image["description"]:
-                    caption = image["description"]
-
-                else:
-                    caption = None
-
-                if image["type"] == "video/mp4":
-                    media.append(Video(image["mp4"], None, caption))
-
-                elif image["type"] == "image/gif":
-                    media.append(Animation(image["gif"], None, caption))
-
-                elif image["type"] in ("image/png", "image/jpeg"):
-                    media.append(Image(image["link"], None, caption))
-
-            return Album(media, url, data["data"]["title"] or None), Metadata()
-
-        else:
-            post_id, *_ = path[1:].split(".")
-
-            data = await self._load(f"{IMGUR_API_URL}/3/image/{post_id}")
-
-            if data["data"]["type"] == "video/mp4":
-                return Video(data["data"]["mp4"], None, data["data"]["title"] or None), Metadata()
-
-            elif data["data"]["type"] == "image/gif":
-                return Video(data["data"]["mp4"], None, data["data"]["title"] or None), Metadata()
-
-            elif data["data"]["type"] in ("image/png", "image/jpeg"):
-                return Image(data["data"]["link"], None, data["data"]["title"] or None), Metadata()
-
-
 class RedditMetadata(Metadata):
     comment_permalink = None
 
@@ -263,4 +187,4 @@ class RedditMetadata(Metadata):
         return buttons
 
 
-__all__ = ["RedditLoader", "REDDIT_REGEXP", "MediaNotFoundError"]
+__all__ = ["RedditLoader", "REDDIT_REGEXP"]
