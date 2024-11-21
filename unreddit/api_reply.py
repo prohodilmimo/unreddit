@@ -2,7 +2,6 @@ import re
 from typing import Dict, Union
 from urllib.parse import urlsplit, urlunsplit
 
-import ujson
 from aiogram.types import *
 from aiohttp import ClientError
 
@@ -22,11 +21,7 @@ class APIReply(Reply):
         Reply.__init__(self, trigger, None, None, "html")
 
     async def attach_from_reddit(self, url: str) -> None:
-        async with self.bot.session.get(url + ".json",
-                                        raise_for_status=True) as response:
-            data = await response.json(loads=ujson.loads)
-
-        op, comments = data
+        op, comments = await self.load(url + ".json")
 
         post_data = op["data"]["children"][0]["data"]
 
@@ -159,9 +154,7 @@ class APIReply(Reply):
 
         post_id, *_ = path[1:].split("-")
 
-        async with self.bot.session.get(f"https://api.gfycat.com/v1/gfycats/{post_id}",
-                                        raise_for_status=True) as response:
-            data = await response.json(loads=ujson.loads)
+        data = await self.load(f"https://api.gfycat.com/v1/gfycats/{post_id}")
 
         if data["gfyItem"]["hasAudio"]:
             self.attach_video(data["gfyItem"]["mp4Url"],
@@ -178,9 +171,7 @@ class APIReply(Reply):
 
         if re.match(r"/gallery/\w+", path):
             *_, post_id = path.split("/")
-            async with self.bot.session.get(f"https://api.imgur.com/3/album/{post_id}",
-                                            raise_for_status=True) as response:
-                data = await response.json(loads=ujson.loads)
+            data = await self.load(f"https://api.imgur.com/3/album/{post_id}")
 
             media = []
 
@@ -228,9 +219,7 @@ class APIReply(Reply):
         else:
             post_id, *_ = path[1:].split(".")
 
-            async with self.bot.session.get(f"https://api.imgur.com/3/image/{post_id}",
-                                            raise_for_status=True) as response:
-                data = await response.json(loads=ujson.loads)
+            data = await self.load(f"https://api.imgur.com/3/image/{post_id}")
 
             if data["data"]["type"] == "video/mp4":
                 self.attach_video(data["data"]["mp4"],
@@ -256,11 +245,7 @@ class RedditCommentReply(Reply):
         Reply.__init__(self, trigger, None, None, "markdown")
 
     async def attach_from_reddit_comment(self, url):
-        async with self.bot.session.get(url + ".json",
-                                        raise_for_status=True) as response:
-            post = await response.json(loads=ujson.loads)
-
-        op, comments = post
+        op, comments = await self.load(url + ".json")
 
         post_data = op["data"]["children"][0]["data"]
         comment_data = comments["data"]["children"][0]["data"]

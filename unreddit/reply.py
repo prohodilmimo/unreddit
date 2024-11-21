@@ -1,7 +1,8 @@
 import hashlib
 import logging
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict
 
+import ujson
 from aiogram import Bot
 from aiogram.types import *
 from aiogram.utils.exceptions import BadRequest
@@ -36,6 +37,10 @@ class Reply:
 
     def set_reply_markup(self, value: InlineKeyboardMarkup) -> None:
         self.__reply_markup = value
+
+    async def load(self, url: str) -> Dict:
+        async with self.bot.session.get(url, raise_for_status=True) as response:
+            return await response.json(loads=ujson.loads)
 
     def __init__(self, trigger: Union[Message, InlineQuery],
                  text: Optional[str],
