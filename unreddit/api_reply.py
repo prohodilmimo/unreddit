@@ -39,7 +39,7 @@ class APIReply(Reply):
         thumbnail = post_data.get("thumbnail", None)
 
         is_reddit_media = post_data.get("is_reddit_media_domain", False)
-        is_gallery = post_data.get("media_metadata") is not None
+        is_gallery = post_data.get("gallery_data") is not None
         is_link_to_imgur = self.IMGUR_REGEXP.search(post_data['url']) is not None
         is_link_to_gfycat = self.GFYCAT_REGEXP.search(post_data['url']) is not None
         is_video = post_data.get("is_video", False)
@@ -70,13 +70,20 @@ class APIReply(Reply):
         elif is_gallery:
             media = []
 
-            for image in post_data["media_metadata"].values():
+            for item in post_data["gallery_data"]["items"]:
+                image = post_data["media_metadata"][item["media_id"]]
+                caption = None
+
                 if image["status"] != "valid":
                     continue
+
+                if item["caption"]:
+                    caption = item["caption"]
 
                 if image["m"] in ("image/png", "image/jpg"):
                     media.append(
                         InputMedia(media=image["s"]["u"].replace("&amp;", "&"),
+                                   caption=caption,
                                    thumb=None,
                                    type=ContentType.PHOTO)
                     )
@@ -84,6 +91,7 @@ class APIReply(Reply):
                 elif image["m"] == "image/gif":
                     media.append(
                         InputMedia(media=image["s"]["u"].replace("&amp;", "&"),
+                                   caption=caption,
                                    thumb=None,
                                    type=ContentType.ANIMATION)
                     )

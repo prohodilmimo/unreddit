@@ -6,7 +6,7 @@ from urllib.parse import unquote
 
 import pytest
 from aiogram import Bot
-from aiogram.types import Message, Chat, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import Message, Chat, InputMedia, InlineKeyboardButton, InlineKeyboardMarkup
 from aiohttp import web, ClientSession
 from aiohttp.web_request import Request
 from pytest_aiohttp.plugin import aiohttp_server
@@ -104,6 +104,29 @@ class InlineKeyboardButtonMock(object):
 
     def __repr__(self):
         return f'<InlineKeyboardButton mock for {self.text} = {self.url}>'
+
+
+class InputMediaMock(object):
+    def __init__(self, media, caption=None):
+        self.media = media
+        self.caption = caption
+
+    def __eq__(self, other):
+        if isinstance(other, InputMedia):
+            return self.media == other.media and self.caption == other.caption
+        elif isinstance(other, InputMediaMock):
+            return self.media == other.media and self.caption == other.caption
+        return False
+
+    def __ne__(self, other):
+        if isinstance(other, InputMedia):
+            return self.media != other.media or self.caption != other.caption
+        elif isinstance(other, InputMediaMock):
+            return self.media != other.media or self.caption != other.caption
+        return True
+
+    def __repr__(self):
+        return f'<InputMedia mock for {self.media}>'
 
 
 def load_response(path) -> Dict:
@@ -253,4 +276,51 @@ async def test_link(reddit_mock_server, chat, bot):
         parse_mode='html',
         reply_markup=buttons,
         reply_to_message_id=message.message_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_gallery(reddit_mock_server, chat, bot):
+    post_url = "https://www.reddit.com/r/masseffect/comments/ioubvj/for_13_year_old_game_it_sure_is_stunning_visuals/"
+
+    reddit_server = await reddit_mock_server
+    async with ClientSession() as session:
+        bot.session = session
+        message = get_message(chat, post_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+            await unreddit(message)
+
+    caption = 'For 13 year old game, it sure is stunning visuals...'
+    attachments = [
+        InputMediaMock(media="https://preview.redd.it/boq7x0gwmxl51.png?width=676&format=png&auto=webp&s=16405993dc74b5f60ed7a5b673d04098ee852789",
+                       caption="Red Sun"),
+        InputMediaMock(media="https://preview.redd.it/mrcuiyswmxl51.png?width=676&format=png&auto=webp&s=32c25cfc1b1422da067fab14b9fdacb7d68c69e7",
+                       caption="Flat Earth"),
+        InputMediaMock(media="https://preview.redd.it/0haqhd3xmxl51.png?width=676&format=png&auto=webp&s=4d8753ee504cc1b2f669b02d3b8154b24021db05",
+                       caption="scars offworld")
+    ]
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=post_url, text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/masseffect", text="r/masseffect")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_media_group,
+        message.chat.id,
+        media=attachments,
+        disable_notification=ANY,
+        reply_to_message_id=message.message_id
+    )
+
+    Mock.assert_called_with(
+        bot.send_message,
+        chat_id=message.chat.id,
+        disable_notification=ANY,
+        disable_web_page_preview=ANY,
+        text=caption,
+        parse_mode=ANY,
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id + 1
     )
