@@ -1,14 +1,17 @@
 import json
 from random import randint
 from typing import Dict, List
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, ANY
+from urllib.parse import unquote
 
 import pytest
 from aiogram import Bot
 from aiogram.types import Message, Chat, InlineKeyboardButton, InlineKeyboardMarkup
-from aiohttp import web
+from aiohttp import web, ClientSession
 from aiohttp.web_request import Request
 from pytest_aiohttp.plugin import aiohttp_server
+
+from unreddit.main import unreddit
 
 MESSAGE_ID = randint(1, 1000)
 
@@ -116,3 +119,138 @@ def reddit_mock_server(aiohttp_server):
     reddit = web.Application()
     reddit.router.add_get("/r/{subreddit}/comments/{post_hash}/{title}/.json", post_handler)
     return aiohttp_server(reddit)
+
+
+@pytest.mark.asyncio
+async def test_image(reddit_mock_server, chat, bot):
+    post_url = "https://www.reddit.com/r/ProperAnimalNames/comments/eakgxt/caaterpillar/"
+
+    reddit_server = await reddit_mock_server
+    async with ClientSession() as session:
+        bot.session = session
+        message = get_message(chat, post_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+            await unreddit(message)
+
+    caption = 'Caaterpillar'
+    attachment_url = "https://preview.redd.it/x0jro2c32m441.jpg?auto=webp&s=7a26ed39ddb092ca26299ce2be0dcffd6c8800d9"
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=post_url, text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/ProperAnimalNames", text="r/ProperAnimalNames")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_photo,
+        chat_id=message.chat.id,
+        caption=caption,
+        disable_notification=ANY,
+        parse_mode=ANY,
+        photo=attachment_url,
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_gif(reddit_mock_server, chat, bot):
+    post_url = "https://www.reddit.com/r/vexillologycirclejerk/comments/1hatfow/flag_of_sweden_but_jesus_died_of_a_bad_apple/"
+
+    reddit_server = await reddit_mock_server
+    async with ClientSession() as session:
+        bot.session = session
+        message = get_message(chat, post_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+            await unreddit(message)
+
+    caption = 'Flag of sweden but Jesus died of a bad apple'
+    attachment_url = "https://preview.redd.it/h7n07ag96y5e1.gif?s=80759c90c117bfbb2ee5dfc3c1d986802de50a64"
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=post_url, text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/vexillologycirclejerk", text="r/vexillologycirclejerk")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_animation,
+        message.chat.id,
+        caption=caption,
+        disable_notification=ANY,
+        duration=ANY,
+        width=ANY,
+        height=ANY,
+        thumb=ANY,
+        parse_mode=ANY,
+        animation=attachment_url,
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_video(reddit_mock_server, chat, bot):
+    post_url = "https://www.reddit.com/r/aww/comments/eafg2x/%CA%B8%E1%B5%83%CA%B7%E2%81%BF/"
+
+    reddit_server = await reddit_mock_server
+    async with ClientSession() as session:
+        bot.session = session
+        message = get_message(chat, post_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+            await unreddit(message)
+
+    caption = 'ʸᵃʷⁿ'
+    attachment_url = "https://v.redd.it/w8qualuy4j441/DASH_720?source=fallback"
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=unquote(post_url), text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/aww", text="r/aww")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_video,
+        chat_id=message.chat.id,
+        caption=caption,
+        disable_notification=ANY,
+        duration=ANY,
+        width=ANY,
+        height=ANY,
+        parse_mode=ANY,
+        video=attachment_url,
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_link(reddit_mock_server, chat, bot):
+    post_url = "https://www.reddit.com/r/formula1/comments/1en284q/rwanda_to_meet_f1_bosses_next_month_to_discuss/"
+
+    reddit_server = await reddit_mock_server
+    async with ClientSession() as session:
+        bot.session = session
+        message = get_message(chat, post_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+            await unreddit(message)
+
+    link_url = "https://www.motorsport.com/f1/news/rwanda-to-meet-f1-bosses-next-month-to-discuss-serious-grand-prix-bid/10642881/"
+    text = f'<a href="{link_url}">🔗</a> Rwanda to meet F1 bosses next month to discuss “serious” Grand Prix bid'
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=post_url, text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/formula1", text="r/formula1")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_message,
+        chat_id=message.chat.id,
+        disable_notification=ANY,
+        disable_web_page_preview=ANY,
+        text=text,
+        parse_mode='html',
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id
+    )
