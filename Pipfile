@@ -11,7 +11,7 @@ ujson = "*"
 uvloop = "*"
 
 [requires]
-python_version = "3.7"
+python_version = "3.9"
 
 [scripts]
 main = "python unreddit/main.py"

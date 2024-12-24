@@ -1,4 +1,4 @@
-FROM python:3.7-slim-buster
+FROM python:3.9-slim-bookworm
 
 RUN apt-get -q update && \
     apt-get -yq install build-essential
