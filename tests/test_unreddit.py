@@ -158,6 +158,16 @@ def reddit_mock_server(aiohttp_server):
     return aiohttp_server(reddit)
 
 
+@pytest.fixture
+def imgur_mock_server(aiohttp_server):
+    async def post_handler(request: Request):
+        return web.json_response(load_response(f"imgur_responses/{request.match_info['post_hash']}.json"))
+
+    imgur = web.Application()
+    imgur.router.add_get("/3/{type}/{post_hash}", post_handler)
+    return aiohttp_server(imgur)
+
+
 @pytest.mark.asyncio
 async def test_image(reddit_mock_server, chat, bot):
     post_url = "https://www.reddit.com/r/ProperAnimalNames/comments/eakgxt/caaterpillar/"
@@ -406,4 +416,91 @@ async def test_crosspost(reddit_mock_server, chat, bot):
         photo=attachment_url,
         reply_markup=buttons,
         reply_to_message_id=message.message_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_imgur_video(reddit_mock_server, imgur_mock_server, chat, bot):
+    post_url = "https://www.reddit.com/r/aww/comments/aie643/giving_a_fennec_fox_a_bath/"
+
+    reddit_server = await reddit_mock_server
+    imgur_server = await imgur_mock_server
+    async with (ClientSession() as session):
+        bot.session = session
+        message = get_message(chat, post_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
+             patch("api_reply.APIReply.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
+            await unreddit(message)
+
+    caption = 'Giving a fennec fox a bath'
+    attachment_url = "https://i.imgur.com/r8v9NAI.mp4"
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=post_url, text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/aww", text="r/aww")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_video,
+        chat_id=message.chat.id,
+        caption=caption,
+        disable_notification=ANY,
+        duration=ANY,
+        width=ANY,
+        height=ANY,
+        parse_mode=ANY,
+        video=attachment_url,
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_imgur_gallery(reddit_mock_server, imgur_mock_server, chat, bot):
+    post_url = "https://www.reddit.com/r/firebrigade/comments/dxhrr1/fire_forces_princess_hibana_wallpaper_series/"
+
+    reddit_server = await reddit_mock_server
+    imgur_server = await imgur_mock_server
+    async with (ClientSession() as session):
+        bot.session = session
+        message = get_message(chat, post_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
+             patch("api_reply.APIReply.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
+            await unreddit(message)
+
+    caption = "Fire Force's Princess Hibana wallpaper series [1920x1080] (stills from latest episode, mild spoilers inside)"
+    attachments = [
+        InputMediaMock(media="https://i.imgur.com/RVftsAw.jpg"),
+        InputMediaMock(media="https://i.imgur.com/4FYXnmp.jpg"),
+        InputMediaMock(media="https://i.imgur.com/m1sgnlq.jpg"),
+        InputMediaMock(media="https://i.imgur.com/aAGms4f.jpg"),
+        InputMediaMock(media="https://i.imgur.com/aMkM0tO.jpg"),
+        InputMediaMock(media="https://i.imgur.com/OrjV12J.jpg"),
+        InputMediaMock(media="https://i.imgur.com/BZJt0BH.jpg")
+    ]
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=post_url, text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/firebrigade", text="r/firebrigade")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_media_group,
+        message.chat.id,
+        media=attachments,
+        disable_notification=ANY,
+        reply_to_message_id=message.message_id
+    )
+
+    Mock.assert_called_with(
+        bot.send_message,
+        chat_id=message.chat.id,
+        disable_notification=ANY,
+        disable_web_page_preview=ANY,
+        text=caption,
+        parse_mode=ANY,
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id + 1
     )
