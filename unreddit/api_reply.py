@@ -14,14 +14,17 @@ class MediaNotFoundError(Exception):
 
 class APIReply(Reply):
     REDDIT_REGEXP = re.compile(r"reddit\.com(/(r|u|user)/\w+/|/)(comments|s)")
+    REDDIT_API_URL = "https://www.reddit.com"
     IMGUR_REGEXP = re.compile(r"imgur\.com")
+    IMGUR_API_URL = "https://api.imgur.com"
     GFYCAT_REGEXP = re.compile(r"gfycat\.com")
+    GFYCAT_API_URL = 'https://api.gfycat.com'
 
     def __init__(self, trigger: Union[Message, InlineQuery]):
         Reply.__init__(self, trigger, None, None, "html")
 
     async def attach_from_reddit(self, url: str) -> None:
-        op, comments = await self.load(url + ".json")
+        op, comments = await self.load(normalize_reddit_url(url) + ".json")
 
         post_data = op["data"]["children"][0]["data"]
 
@@ -154,7 +157,7 @@ class APIReply(Reply):
 
         post_id, *_ = path[1:].split("-")
 
-        data = await self.load(f"https://api.gfycat.com/v1/gfycats/{post_id}")
+        data = await self.load(f"{self.GFYCAT_API_URL}/v1/gfycats/{post_id}")
 
         if data["gfyItem"]["hasAudio"]:
             self.attach_video(data["gfyItem"]["mp4Url"],
@@ -171,7 +174,7 @@ class APIReply(Reply):
 
         if re.match(r"/gallery/\w+", path):
             *_, post_id = path.split("/")
-            data = await self.load(f"https://api.imgur.com/3/album/{post_id}")
+            data = await self.load(f"{self.IMGUR_API_URL}/3/album/{post_id}")
 
             media = []
 
@@ -219,7 +222,7 @@ class APIReply(Reply):
         else:
             post_id, *_ = path[1:].split(".")
 
-            data = await self.load(f"https://api.imgur.com/3/image/{post_id}")
+            data = await self.load(f"{self.IMGUR_API_URL}/3/image/{post_id}")
 
             if data["data"]["type"] == "video/mp4":
                 self.attach_video(data["data"]["mp4"],
@@ -245,13 +248,19 @@ class RedditCommentReply(Reply):
         Reply.__init__(self, trigger, None, None, "markdown")
 
     async def attach_from_reddit_comment(self, url):
-        op, comments = await self.load(url + ".json")
+        op, comments = await self.load(normalize_reddit_url(url) + ".json")
 
         post_data = op["data"]["children"][0]["data"]
         comment_data = comments["data"]["children"][0]["data"]
 
         self.attach_text(comment_data["body"])
         self.set_reply_markup(generate_reddit_buttons(url, post_data, comment_data))
+
+
+def normalize_reddit_url(url: str) -> str:
+    _, _, path, *_ = urlsplit(url)
+    scheme, netloc, *_ = urlsplit(APIReply.REDDIT_API_URL)
+    return f"{urlunsplit((scheme, netloc, path, None, None))}"
 
 
 def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
@@ -282,4 +291,4 @@ def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
     return InlineKeyboardMarkup().add(*buttons)
 
 
-__all__ = ["APIReply", "RedditCommentReply", "MediaNotFoundError"]
+__all__ = ["APIReply", "RedditCommentReply", "MediaNotFoundError", "normalize_reddit_url"]
