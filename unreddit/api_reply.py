@@ -110,7 +110,8 @@ class APIReply(Reply):
 
             elif post_hint is not None:
                 image_url = post_data["preview"]["images"][0]["source"]["url"]
-                thumbnail = post_data["preview"]["images"][0]["resolutions"][0]["url"]
+                if post_data["preview"]["images"][0]["resolutions"]:
+                    thumbnail = post_data["preview"]["images"][0]["resolutions"][0]["url"]
 
             image_url = image_url.replace("&amp;", "&")
 

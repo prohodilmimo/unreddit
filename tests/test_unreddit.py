@@ -373,3 +373,37 @@ async def test_comment(reddit_mock_server, chat, bot):
         reply_markup=buttons,
         reply_to_message_id=message.message_id
     )
+
+
+@pytest.mark.asyncio
+async def test_crosspost(reddit_mock_server, chat, bot):
+    share_url = "https://www.reddit.com/r/badukshitposting/s/auJDBZLHYO/"
+    post_url = "https://www.reddit.com/r/badukshitposting/comments/1hbq2co/how_the_heck_am_i_supposed_to_play_this/"
+    SHARE_MAP["auJDBZLHYO"] = post_url
+
+    reddit_server = await reddit_mock_server
+    async with ClientSession() as session:
+        bot.session = session
+        message = get_message(chat, share_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+            await unreddit(message)
+
+    caption = "How the heck am I supposed to play this?"
+    attachment_url = "https://preview.redd.it/ps319gqzt36e1.png?auto=webp&s=ce817f1c5c0c57b2fc0b8908a378f1c0b9ab3864"
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=post_url, text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/badukshitposting", text="r/badukshitposting")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_photo,
+        chat_id=message.chat.id,
+        caption=caption,
+        disable_notification=ANY,
+        parse_mode=ANY,
+        photo=attachment_url,
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id
+    )
