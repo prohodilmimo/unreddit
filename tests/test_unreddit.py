@@ -9,11 +9,13 @@ from aiogram import Bot
 from aiogram.types import Message, Chat, InputMedia, InlineKeyboardButton, InlineKeyboardMarkup
 from aiohttp import web, ClientSession
 from aiohttp.web_request import Request
+from aiohttp.web_response import Response
 from pytest_aiohttp.plugin import aiohttp_server
 
 from unreddit.main import unreddit
 
 MESSAGE_ID = randint(1, 1000)
+SHARE_MAP = {}
 
 
 @pytest.fixture
@@ -134,13 +136,25 @@ def load_response(path) -> Dict:
         return json.load(file)
 
 
+def resolve_share(share_hash) -> str:
+    return SHARE_MAP[share_hash]
+
+
 @pytest.fixture
 def reddit_mock_server(aiohttp_server):
     async def post_handler(request: Request):
         return web.json_response(load_response(f"reddit_responses/{request.match_info['post_hash']}.json"))
 
+    async def comment_handler(request: Request):
+        return web.json_response(load_response(f"reddit_responses/{request.match_info['comment_hash']}.json"))
+
+    async def redirect_handler(request: Request):
+        return Response(status=302, headers={"Location": resolve_share(request.match_info['share_hash'])})
+
     reddit = web.Application()
     reddit.router.add_get("/r/{subreddit}/comments/{post_hash}/{title}/.json", post_handler)
+    reddit.router.add_get("/r/{subreddit}/comments/{post_hash}/{title}/{comment_hash}/.json", comment_handler)
+    reddit.router.add_head("/r/{subreddit}/s/{share_hash}/", redirect_handler)
     return aiohttp_server(reddit)
 
 
@@ -323,4 +337,39 @@ async def test_gallery(reddit_mock_server, chat, bot):
         parse_mode=ANY,
         reply_markup=buttons,
         reply_to_message_id=message.message_id + 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_comment(reddit_mock_server, chat, bot):
+    share_url = "https://www.reddit.com/r/ShitpostXIV/s/7qTY1lb9Dc/"
+    comment_url = "https://www.reddit.com/r/ShitpostXIV/comments/1hl0gyj/breaking_news_in_response_to_the_people/m3ij6ht/"
+    SHARE_MAP["7qTY1lb9Dc"] = comment_url
+
+    reddit_server = await reddit_mock_server
+    async with ClientSession() as session:
+        bot.session = session
+        message = get_message(chat, share_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+            await unreddit(message)
+
+    post_permalink = "https://www.reddit.com/r/ShitpostXIV/comments/1hl0gyj/breaking_news_in_response_to_the_people/"
+    text = "This was mildly amusing as a comment on the big post; as a standalone post it's not very good."
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=comment_url, text="Comment"),
+        InlineKeyboardButtonMock(url=post_permalink, text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/ShitpostXIV", text="r/ShitpostXIV")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_message,
+        chat_id=message.chat.id,
+        disable_notification=ANY,
+        disable_web_page_preview=ANY,
+        text=text,
+        parse_mode=ANY,
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id
     )
