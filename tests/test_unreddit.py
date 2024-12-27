@@ -7,6 +7,7 @@ from urllib.parse import unquote
 import pytest
 from aiogram import Bot
 from aiogram.types import Message, Chat, InputMedia, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils.exceptions import BadRequest
 from aiohttp import web, ClientSession
 from aiohttp.web_request import Request
 from aiohttp.web_response import Response
@@ -503,4 +504,39 @@ async def test_imgur_gallery(reddit_mock_server, imgur_mock_server, chat, bot):
         parse_mode=ANY,
         reply_markup=buttons,
         reply_to_message_id=message.message_id + 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_fallback(reddit_mock_server, imgur_mock_server, chat, bot):
+    post_url = "https://www.reddit.com/r/Animemes/comments/e7eno4/mob_chuuni_200_op_chuunibyou_x_mob_psycho_100/"
+
+    reddit_server = await reddit_mock_server
+    async with (ClientSession() as session):
+        bot.session = session
+        bot.send_video = AsyncMock(side_effect=BadRequest("Mock Error"))
+        message = get_message(chat, post_url)
+
+        with patch("aiogram.types.base.TelegramObject.bot", bot), \
+             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+            await unreddit(message)
+
+    attachment_url = "https://v.redd.it/gfhrkwfbs7341/DASH_1080?source=fallback"
+    text = (f'<a href="{attachment_url}">🎬 Mob Chuuni 200 OP (Chuunibyou X Mob Psycho 100)</a>\n'
+            f'\n'
+            f'[Telegram wasn\'t able to embed the video]')
+    buttons = InlineKeyboardMarkupMock([[
+        InlineKeyboardButtonMock(url=post_url, text="Original Post"),
+        InlineKeyboardButtonMock(url="https://www.reddit.com/r/Animemes", text="r/Animemes")
+    ]])
+
+    Mock.assert_called_with(
+        bot.send_message,
+        chat_id=message.chat.id,
+        disable_notification=ANY,
+        disable_web_page_preview=ANY,
+        text=text,
+        parse_mode='html',
+        reply_markup=buttons,
+        reply_to_message_id=message.message_id
     )
