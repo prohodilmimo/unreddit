@@ -4,6 +4,7 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
+pytest-aiohttp = "*"
 
 [packages]
 aiogram = "==2.4"
@@ -11,7 +12,7 @@ ujson = "*"
 uvloop = "*"
 
 [requires]
-python_version = "3.7"
+python_version = "3.9"
 
 [scripts]
 main = "python unreddit/main.py"

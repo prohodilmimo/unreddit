@@ -2,7 +2,7 @@ import logging
 import os
 import re
 from typing import Dict, Union
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 import ujson
 import uvloop
@@ -13,13 +13,6 @@ from aiohttp import ClientError, ClientSession
 from api_reply import *
 
 
-def clean_up_url(url):
-    scheme, netloc, path, *_ = urlsplit(url)
-    if not netloc.startswith("www"):
-        netloc = "www." + netloc
-    return urlunsplit((scheme, netloc, path, None, None))
-
-
 def get_urls(text: str) -> str:
     urls = re.findall(
         "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
@@ -27,12 +20,12 @@ def get_urls(text: str) -> str:
     )
 
     for url in urls:
-        yield clean_up_url(url)
+        yield url
 
 
 async def resolve_opaque_share_url(session: ClientSession, url: str) -> str:
-    async with session.head(url, raise_for_status=True, allow_redirects=False) as response:
-        return clean_up_url(response.headers.get("Location"))
+    async with session.head(normalize_reddit_url(url), raise_for_status=True, allow_redirects=False) as response:
+        return response.headers.get("Location")
 
 
 async def unreddit(trigger: Union[Message, InlineQuery]):

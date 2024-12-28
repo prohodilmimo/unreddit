@@ -1,0 +1,39 @@
+{
+    "status": 200,
+    "success": true,
+    "data": {
+        "id": "r8v9NAI",
+        "deletehash": "",
+        "account_id": 99734997,
+        "account_url": null,
+        "ad_type": null,
+        "ad_url": null,
+        "title": "Giving a fennec fox a bath",
+        "description": null,
+        "name": "",
+        "type": "video/mp4",
+        "width": 640,
+        "height": 640,
+        "size": 0,
+        "views": 0,
+        "section": null,
+        "vote": null,
+        "bandwidth": 0,
+        "animated": true,
+        "favorite": false,
+        "in_gallery": false,
+        "in_most_viral": false,
+        "has_sound": false,
+        "is_ad": false,
+        "nsfw": null,
+        "link": "https://i.imgur.com/r8v9NAI.mp4",
+        "tags": [],
+        "mp4_size": 2146146,
+        "processing": {
+            "status": "completed"
+        },
+        "datetime": 1548096031,
+        "mp4": "https://i.imgur.com/r8v9NAI.mp4",
+        "hls": ""
+    }
+}

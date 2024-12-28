@@ -2,7 +2,6 @@ import re
 from typing import Dict, Union
 from urllib.parse import urlsplit, urlunsplit
 
-import ujson
 from aiogram.types import *
 from aiohttp import ClientError
 
@@ -15,18 +14,17 @@ class MediaNotFoundError(Exception):
 
 class APIReply(Reply):
     REDDIT_REGEXP = re.compile(r"reddit\.com(/(r|u|user)/\w+/|/)(comments|s)")
+    REDDIT_API_URL = "https://www.reddit.com"
     IMGUR_REGEXP = re.compile(r"imgur\.com")
+    IMGUR_API_URL = "https://api.imgur.com"
     GFYCAT_REGEXP = re.compile(r"gfycat\.com")
+    GFYCAT_API_URL = 'https://api.gfycat.com'
 
     def __init__(self, trigger: Union[Message, InlineQuery]):
         Reply.__init__(self, trigger, None, None, "html")
 
     async def attach_from_reddit(self, url: str) -> None:
-        async with self.bot.session.get(url + ".json",
-                                        raise_for_status=True) as response:
-            data = await response.json(loads=ujson.loads)
-
-        op, comments = data
+        op, comments = await self.load(normalize_reddit_url(url) + ".json")
 
         post_data = op["data"]["children"][0]["data"]
 
@@ -41,7 +39,7 @@ class APIReply(Reply):
         thumbnail = post_data.get("thumbnail", None)
 
         is_reddit_media = post_data.get("is_reddit_media_domain", False)
-        is_gallery = post_data.get("media_metadata") is not None
+        is_gallery = post_data.get("gallery_data") is not None
         is_link_to_imgur = self.IMGUR_REGEXP.search(post_data['url']) is not None
         is_link_to_gfycat = self.GFYCAT_REGEXP.search(post_data['url']) is not None
         is_video = post_data.get("is_video", False)
@@ -72,13 +70,20 @@ class APIReply(Reply):
         elif is_gallery:
             media = []
 
-            for image in post_data["media_metadata"].values():
+            for item in post_data["gallery_data"]["items"]:
+                image = post_data["media_metadata"][item["media_id"]]
+                caption = None
+
                 if image["status"] != "valid":
                     continue
+
+                if item["caption"]:
+                    caption = item["caption"]
 
                 if image["m"] in ("image/png", "image/jpg"):
                     media.append(
                         InputMedia(media=image["s"]["u"].replace("&amp;", "&"),
+                                   caption=caption,
                                    thumb=None,
                                    type=ContentType.PHOTO)
                     )
@@ -86,6 +91,7 @@ class APIReply(Reply):
                 elif image["m"] == "image/gif":
                     media.append(
                         InputMedia(media=image["s"]["u"].replace("&amp;", "&"),
+                                   caption=caption,
                                    thumb=None,
                                    type=ContentType.ANIMATION)
                     )
@@ -104,7 +110,8 @@ class APIReply(Reply):
 
             elif post_hint is not None:
                 image_url = post_data["preview"]["images"][0]["source"]["url"]
-                thumbnail = post_data["preview"]["images"][0]["resolutions"][0]["url"]
+                if post_data["preview"]["images"][0]["resolutions"]:
+                    thumbnail = post_data["preview"]["images"][0]["resolutions"][0]["url"]
 
             image_url = image_url.replace("&amp;", "&")
 
@@ -159,9 +166,7 @@ class APIReply(Reply):
 
         post_id, *_ = path[1:].split("-")
 
-        async with self.bot.session.get(f"https://api.gfycat.com/v1/gfycats/{post_id}",
-                                        raise_for_status=True) as response:
-            data = await response.json(loads=ujson.loads)
+        data = await self.load(f"{self.GFYCAT_API_URL}/v1/gfycats/{post_id}")
 
         if data["gfyItem"]["hasAudio"]:
             self.attach_video(data["gfyItem"]["mp4Url"],
@@ -178,9 +183,7 @@ class APIReply(Reply):
 
         if re.match(r"/gallery/\w+", path):
             *_, post_id = path.split("/")
-            async with self.bot.session.get(f"https://api.imgur.com/3/album/{post_id}",
-                                            raise_for_status=True) as response:
-                data = await response.json(loads=ujson.loads)
+            data = await self.load(f"{self.IMGUR_API_URL}/3/album/{post_id}")
 
             media = []
 
@@ -228,9 +231,7 @@ class APIReply(Reply):
         else:
             post_id, *_ = path[1:].split(".")
 
-            async with self.bot.session.get(f"https://api.imgur.com/3/image/{post_id}",
-                                            raise_for_status=True) as response:
-                data = await response.json(loads=ujson.loads)
+            data = await self.load(f"{self.IMGUR_API_URL}/3/image/{post_id}")
 
             if data["data"]["type"] == "video/mp4":
                 self.attach_video(data["data"]["mp4"],
@@ -256,17 +257,19 @@ class RedditCommentReply(Reply):
         Reply.__init__(self, trigger, None, None, "markdown")
 
     async def attach_from_reddit_comment(self, url):
-        async with self.bot.session.get(url + ".json",
-                                        raise_for_status=True) as response:
-            post = await response.json(loads=ujson.loads)
-
-        op, comments = post
+        op, comments = await self.load(normalize_reddit_url(url) + ".json")
 
         post_data = op["data"]["children"][0]["data"]
         comment_data = comments["data"]["children"][0]["data"]
 
         self.attach_text(comment_data["body"])
         self.set_reply_markup(generate_reddit_buttons(url, post_data, comment_data))
+
+
+def normalize_reddit_url(url: str) -> str:
+    _, _, path, *_ = urlsplit(url)
+    scheme, netloc, *_ = urlsplit(APIReply.REDDIT_API_URL)
+    return f"{urlunsplit((scheme, netloc, path, None, None))}"
 
 
 def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
@@ -297,4 +300,4 @@ def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
     return InlineKeyboardMarkup().add(*buttons)
 
 
-__all__ = ["APIReply", "RedditCommentReply", "MediaNotFoundError"]
+__all__ = ["APIReply", "RedditCommentReply", "MediaNotFoundError", "normalize_reddit_url"]
