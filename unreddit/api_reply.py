@@ -21,8 +21,22 @@ GFYCAT_API_URL = "https://api.gfycat.com"
 
 
 class RedditLoader(ContentLoader):
+    def is_comment_url(self, url):
+        path = [part for part in get_path(url).split("/") if part]
+        return len(path) == 6 or len(path) == 4
+
     async def load(self, url: str) -> Tuple[Content, Metadata]:
-        op, comments = await self._load(normalize_reddit_url(url) + ".json")
+        match = REDDIT_REGEXP.search(url)
+
+        if not match:
+            raise MediaNotFoundError
+
+        if 's' in match.groups():  # is an opaque share link
+            url = await self._resolve_redirect(url)
+
+        is_comment = self.is_comment_url(url)
+
+        op, comments = await self._load(repath_url(REDDIT_API_URL, get_path(url)) + ".json")
 
         post_data = op["data"]["children"][0]["data"]
 
@@ -48,6 +62,7 @@ class RedditLoader(ContentLoader):
 
         if post_hint is None and (not is_reddit_media and
                                   not is_gallery and
+                                  not is_comment and
                                   not is_link_to_imgur and
                                   not is_link_to_gfycat):
             raise MediaNotFoundError
@@ -142,6 +157,13 @@ class RedditLoader(ContentLoader):
         elif post_hint == "link":
             return Link(post_data["url"], title), metadata
 
+        elif is_comment:
+            comment_data = comments["data"]["children"][0]["data"]
+
+            metadata = RedditMetadata(url, post_data, comment_data)
+
+            return Text(comment_data["body"], parse_mode="markdown"), metadata
+
         else:
             raise MediaNotFoundError
 
@@ -215,21 +237,6 @@ class ImgurLoader(ContentLoader):
                 return Image(data["data"]["link"], None, data["data"]["title"] or None), Metadata()
 
 
-class RedditCommentLoader(ContentLoader):
-    async def load(self, url: str) -> Tuple[Content, Metadata]:
-        op, comments = await self._load(normalize_reddit_url(url) + ".json")
-
-        post_data = op["data"]["children"][0]["data"]
-        comment_data = comments["data"]["children"][0]["data"]
-
-        metadata = RedditMetadata(url, post_data, comment_data)
-        return Text(comment_data["body"], parse_mode="markdown"), metadata
-
-
-def normalize_reddit_url(url: str) -> str:
-    return repath_url(REDDIT_API_URL, get_path(url))
-
-
 class RedditMetadata(Metadata):
     comment_permalink = None
 
@@ -256,4 +263,4 @@ class RedditMetadata(Metadata):
         return buttons
 
 
-__all__ = ["RedditLoader", "RedditCommentLoader", "REDDIT_REGEXP", "MediaNotFoundError", "normalize_reddit_url"]
+__all__ = ["RedditLoader", "REDDIT_REGEXP", "MediaNotFoundError"]

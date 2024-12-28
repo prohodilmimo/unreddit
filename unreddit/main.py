@@ -7,16 +7,11 @@ import ujson
 import uvloop
 from aiogram import Bot, Dispatcher, executor
 from aiogram.types import Message, InlineQuery
-from aiohttp import ClientError, ClientSession
+from aiohttp import ClientError
 
-from api_reply import *
+from api_reply import MediaNotFoundError, REDDIT_REGEXP, RedditLoader
 from reply import Reply
-from url_utils import find_urls, get_path
-
-
-async def resolve_opaque_share_url(session: ClientSession, url: str) -> str:
-    async with session.head(normalize_reddit_url(url), raise_for_status=True, allow_redirects=False) as response:
-        return response.headers.get("Location")
+from url_utils import find_urls
 
 
 async def unreddit(trigger: Union[Message, InlineQuery]):
@@ -30,26 +25,7 @@ async def unreddit(trigger: Union[Message, InlineQuery]):
         return
 
     for url in find_urls(text):
-        match = REDDIT_REGEXP.search(url)
-
-        if not match:
-            continue
-
-        if 's' in match.groups():  # is an opaque share link
-            url = await resolve_opaque_share_url(trigger.bot.session, url)
-
-        path = get_path(url)
-
-        path = [part for part in path.split("/") if part]
-
-        if len(path) == 6 or len(path) == 4:  # is a link to the comment
-            if not isinstance(trigger, Message):
-                continue
-
-            loader = RedditCommentLoader(trigger.bot.session)
-
-        else:
-            loader = RedditLoader(trigger.bot.session)
+        loader = RedditLoader(trigger.bot.session)
 
         try:
             attachment, metadata = await loader.load(url)

@@ -26,6 +26,10 @@ class ContentLoader:
     async def load(self, url: str) -> Tuple[Content, Metadata]:
         pass
 
+    async def _resolve_redirect(self, url: str) -> str:
+        async with self.__session.head(url, raise_for_status=True, allow_redirects=False) as response:
+            return response.headers.get("Location")
+
     async def _load(self, url: str) -> Any:
         async with self.__session.get(url, raise_for_status=True) as response:
             return await response.json(loads=ujson.loads)
