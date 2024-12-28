@@ -1,41 +1,53 @@
 import hashlib
 import logging
-from typing import Optional, List, Union, Dict
+from abc import abstractmethod
+from typing import Union, Any, Tuple
 
 import ujson
-from aiogram import Bot
 from aiogram.types import (Message, InlineQuery, InlineKeyboardMarkup, ContentType, InputMedia,
                            InlineQueryResultGif, InlineQueryResultPhoto, InlineQueryResultVideo, InlineKeyboardButton,
                            InlineQueryResult)
 from aiogram.utils.exceptions import BadRequest
+from aiohttp import ClientSession
 
 from content import *
 
 
-class Reply:
-    @property
-    def bot(self) -> Bot:
-        return self.__trigger.bot
+class ContentLoader:
+    def __init__(self, session: ClientSession = None, parent: "ContentLoader" = None):
+        if session is not None:
+            self.__session = session
+        elif parent is not None:
+            self.__session = parent.__session
+        else:
+            raise ValueError()
 
-    def set_caption(self, value: str) -> None:
-        self.__content.caption = value
+    @abstractmethod
+    async def load(self, url: str) -> Tuple[Content, Metadata]:
+        pass
 
-    def set_reply_markup(self, value: List[Button]) -> None:
-        self.__reply_markup = InlineKeyboardMarkup()
-        for button in value:
-            self.__reply_markup.add(InlineKeyboardButton(text=button.text, url=button.url))
-
-    async def load(self, url: str) -> Dict:
-        async with self.bot.session.get(url, raise_for_status=True) as response:
+    async def _load(self, url: str) -> Any:
+        async with self.__session.get(url, raise_for_status=True) as response:
             return await response.json(loads=ujson.loads)
 
-    def __init__(self, trigger: Union[Message, InlineQuery]):
-        self.__trigger = trigger
-        self.__content = None
-        self.__reply_markup = None
 
-    def attach_content(self, content: Content) -> None:
+class Reply:
+    @staticmethod
+    def _to_keyboard_markup(metadata: Metadata) -> InlineKeyboardMarkup:
+        markup = InlineKeyboardMarkup()
+
+        for button in metadata.get_buttons():
+            markup.add(InlineKeyboardButton(button.text, url=button.url))
+
+        return markup
+
+    def __init__(self, trigger: Union[Message, InlineQuery],
+                 content: Content,
+                 metadata: Metadata):
+
+        self.__trigger = trigger
         self.__content = content
+        self.__reply_markup = self._to_keyboard_markup(metadata)
 
     async def send(self):
         if isinstance(self.__trigger, Message):
@@ -109,6 +121,7 @@ async def _send_inline(query: InlineQuery, content: Media, reply_markup: InlineK
     except Exception as e:
         logging.getLogger().exception("", exc_info=e)
 
+
 def _to_query_result(media: Media, reply_markup: InlineKeyboardMarkup = None) -> InlineQueryResult:
     data_id = hashlib.md5(media.payload.encode()).hexdigest()
 
@@ -146,6 +159,9 @@ def _to_query_result(media: Media, reply_markup: InlineKeyboardMarkup = None) ->
             thumb_url=media.thumbnail
         )
 
+    else:
+        raise ValueError()
+
 
 def _to_input_media(media: Media) -> InputMedia:
     if isinstance(media, Video):
@@ -172,5 +188,8 @@ def _to_input_media(media: Media) -> InputMedia:
             type=ContentType.ANIMATION
         )
 
+    else:
+        raise ValueError()
 
-__all__ = ["Reply"]
+
+__all__ = ["Reply", "ContentLoader"]

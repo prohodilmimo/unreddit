@@ -1,10 +1,10 @@
 import re
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from aiohttp import ClientError
 
 from content import *
-from reply import Reply
+from reply import ContentLoader
 from url_utils import repath_url, get_path
 
 
@@ -12,21 +12,22 @@ class MediaNotFoundError(Exception):
     pass
 
 
-class APIReply(Reply):
-    REDDIT_REGEXP = re.compile(r"reddit\.com(/(r|u|user)/\w+/|/)(comments|s)")
-    REDDIT_API_URL = "https://www.reddit.com"
-    IMGUR_REGEXP = re.compile(r"imgur\.com")
-    IMGUR_API_URL = "https://api.imgur.com"
-    GFYCAT_REGEXP = re.compile(r"gfycat\.com")
-    GFYCAT_API_URL = "https://api.gfycat.com"
+REDDIT_REGEXP = re.compile(r"reddit\.com(/(r|u|user)/\w+/|/)(comments|s)")
+REDDIT_API_URL = "https://www.reddit.com"
+IMGUR_REGEXP = re.compile(r"imgur\.com")
+IMGUR_API_URL = "https://api.imgur.com"
+GFYCAT_REGEXP = re.compile(r"gfycat\.com")
+GFYCAT_API_URL = "https://api.gfycat.com"
 
-    async def attach_from_reddit(self, url: str) -> None:
-        op, comments = await self.load(normalize_reddit_url(url) + ".json")
+
+class RedditLoader(ContentLoader):
+    async def load(self, url: str) -> Tuple[Content, Metadata]:
+        op, comments = await self._load(normalize_reddit_url(url) + ".json")
 
         post_data = op["data"]["children"][0]["data"]
 
         title = post_data.get("title", None)
-        self.set_reply_markup(generate_reddit_buttons(url, post_data))
+        metadata = RedditMetadata(url, post_data)
 
         if "crosspost_parent_list" in post_data:
             post_data = post_data["crosspost_parent_list"][0]
@@ -37,8 +38,8 @@ class APIReply(Reply):
 
         is_reddit_media = post_data.get("is_reddit_media_domain", False)
         is_gallery = post_data.get("gallery_data") is not None
-        is_link_to_imgur = self.IMGUR_REGEXP.search(post_data['url']) is not None
-        is_link_to_gfycat = self.GFYCAT_REGEXP.search(post_data['url']) is not None
+        is_link_to_imgur = IMGUR_REGEXP.search(post_data['url']) is not None
+        is_link_to_gfycat = GFYCAT_REGEXP.search(post_data['url']) is not None
         is_video = post_data.get("is_video", False)
         is_nsfw = post_data.get("over_18", False)
 
@@ -60,9 +61,7 @@ class APIReply(Reply):
             if thumbnail:
                 thumbnail = thumbnail.replace("&amp;", "&")
 
-            self.attach_content(Video(post_data["secure_media"]["reddit_video"]["fallback_url"],
-                                      thumbnail,
-                                      title))
+            return Video(post_data["secure_media"]["reddit_video"]["fallback_url"], thumbnail, title), metadata
 
         elif is_gallery:
             media = []
@@ -83,7 +82,7 @@ class APIReply(Reply):
                 elif image["m"] == "image/gif":
                     media.append(Animation(image["s"]["u"].replace("&amp;", "&"), None, caption))
 
-            self.attach_content(Album(media, post_data["url"], title))
+            return Album(media, post_data["url"], title), metadata
 
         elif post_hint == "image" or (post_hint is None and is_reddit_media):
             image_url = post_data["url"]
@@ -106,67 +105,74 @@ class APIReply(Reply):
                 thumbnail = thumbnail.replace("&amp;", "&")
 
             if is_gif:
-                self.attach_content(Animation(image_url, thumbnail, title))
+                return Animation(image_url, thumbnail, title), metadata
 
             else:
-                self.attach_content(Image(image_url, thumbnail, title))
+                return Image(image_url, thumbnail, title), metadata
 
         elif is_link_to_imgur:
             try:
-                await self.attach_from_imgur(post_data['url'])
+                content, _ = await ImgurLoader(parent=self).load(post_data['url'])
 
-                self.set_caption(title)
+                content.caption = title
+                return content, metadata
 
             except ClientError:
-                self.attach_content(Link(post_data["url"], title, icon="🖼"))
+                return Link(post_data["url"], title, icon="🎬"), metadata
 
         elif is_link_to_gfycat:
             try:
-                await self.attach_from_gfycat(post_data['url'])
+                content, _ = await GfyCatLoader(parent=self).load(post_data['url'])
 
-                self.set_caption(title)
+                content.caption = title
+                return content, metadata
 
             except ClientError:
-                self.attach_content(Link(post_data["url"], title, icon="🎬"))
+                return Link(post_data["url"], title, icon="🖼"), metadata
 
         # Video embeds
         elif post_hint == "rich:video":
             if is_nsfw:
-                self.attach_content(Link(post_data["url"], title, icon="🔞"))
+                return Link(post_data["url"], title, icon="🔞"), metadata
 
             else:
-                self.attach_content(Link(post_data["url"], title, icon="🎬"))
+                return Link(post_data["url"], title, icon="🎬"), metadata
 
         # Links
         elif post_hint == "link":
-            self.attach_content(Link(post_data["url"], title))
+            return Link(post_data["url"], title), metadata
 
         else:
             raise MediaNotFoundError
 
-    async def attach_from_gfycat(self, url: str) -> None:
+
+class GfyCatLoader(ContentLoader):
+    async def load(self, url: str) -> Tuple[Content, Metadata]:
         path = get_path(url)
 
         post_id, *_ = path[1:].split("-")
 
-        data = await self.load(f"{self.GFYCAT_API_URL}/v1/gfycats/{post_id}")
+        data = await self._load(f"{GFYCAT_API_URL}/v1/gfycats/{post_id}")
 
         if data["gfyItem"]["hasAudio"]:
-            self.attach_content(Video(data["gfyItem"]["mp4Url"],
-                                      data["gfyItem"]["thumb100PosterUrl"],
-                                      data["gfyItem"]["title"] or None))
-
+            return Video(data["gfyItem"]["mp4Url"],
+                         data["gfyItem"]["thumb100PosterUrl"],
+                         data["gfyItem"]["title"] or None), \
+                Metadata()
         else:
-            self.attach_content(Animation(data["gfyItem"]["gifUrl"],
-                                          data["gfyItem"]["thumb100PosterUrl"],
-                                          data["gfyItem"]["title"] or None))
+            return Animation(data["gfyItem"]["gifUrl"],
+                             data["gfyItem"]["thumb100PosterUrl"],
+                             data["gfyItem"]["title"] or None), \
+                Metadata()
 
-    async def attach_from_imgur(self, url: str) -> None:
+
+class ImgurLoader(ContentLoader):
+    async def load(self, url: str) -> Tuple[Content, Metadata]:
         path = get_path(url)
 
         if re.match(r"/gallery/\w+", path):
             *_, post_id = path.split("/")
-            data = await self.load(f"{self.IMGUR_API_URL}/3/album/{post_id}")
+            data = await self._load(f"{IMGUR_API_URL}/3/album/{post_id}")
 
             media = []
 
@@ -192,58 +198,62 @@ class APIReply(Reply):
                 elif image["type"] in ("image/png", "image/jpeg"):
                     media.append(Image(image["link"], None, caption))
 
-            self.attach_content(Album(media, url, data["data"]["title"] or None))
+            return Album(media, url, data["data"]["title"] or None), Metadata()
 
         else:
             post_id, *_ = path[1:].split(".")
 
-            data = await self.load(f"{self.IMGUR_API_URL}/3/image/{post_id}")
+            data = await self._load(f"{IMGUR_API_URL}/3/image/{post_id}")
 
             if data["data"]["type"] == "video/mp4":
-                self.attach_content(Video(data["data"]["mp4"], None, data["data"]["title"] or None))
+                return Video(data["data"]["mp4"], None, data["data"]["title"] or None), Metadata()
 
             elif data["data"]["type"] == "image/gif":
-                self.attach_content(Video(data["data"]["mp4"], None, data["data"]["title"] or None))
+                return Video(data["data"]["mp4"], None, data["data"]["title"] or None), Metadata()
 
             elif data["data"]["type"] in ("image/png", "image/jpeg"):
-                self.attach_content(Image(data["data"]["link"], None, data["data"]["title"] or None))
+                return Image(data["data"]["link"], None, data["data"]["title"] or None), Metadata()
 
 
-class RedditCommentReply(Reply):
-    async def attach_from_reddit_comment(self, url):
-        op, comments = await self.load(normalize_reddit_url(url) + ".json")
+class RedditCommentLoader(ContentLoader):
+    async def load(self, url: str) -> Tuple[Content, Metadata]:
+        op, comments = await self._load(normalize_reddit_url(url) + ".json")
 
         post_data = op["data"]["children"][0]["data"]
         comment_data = comments["data"]["children"][0]["data"]
 
-        self.attach_content(Text(comment_data["body"], "markdown"))
-        self.set_reply_markup(generate_reddit_buttons(url, post_data, comment_data))
+        metadata = RedditMetadata(url, post_data, comment_data)
+        return Text(comment_data["body"], parse_mode="markdown"), metadata
 
 
 def normalize_reddit_url(url: str) -> str:
-    return repath_url(APIReply.REDDIT_API_URL, get_path(url))
+    return repath_url(REDDIT_API_URL, get_path(url))
 
 
-def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
-                            ) -> List[Button]:
-    permalink = post_data["permalink"]
-    sub = post_data["subreddit_name_prefixed"]
-    author = "u/" + post_data["author"]
+class RedditMetadata(Metadata):
+    comment_permalink = None
 
-    buttons = []
+    def __init__(self, url: str, post_data: Dict, comment_data: Dict = None):
+        self.post_permalink = repath_url(url, post_data["permalink"])
+        self.sub = post_data["subreddit_name_prefixed"]
+        self.sub_link = repath_url(url, self.sub)
+        self.author = "u/" + post_data["author"]
+        if comment_data:
+            self.author = "u/" + comment_data["author"]
+            self.comment_permalink = repath_url(url, comment_data["permalink"])
 
-    if comment_data is not None:
-        author = "u/" + comment_data["author"]
-        comment_permalink = comment_data["permalink"]
+    def get_buttons(self) -> List[Button]:
+        buttons = []
 
-        buttons.append(Button("Comment", url=repath_url(url, comment_permalink)))
+        if self.comment_permalink:
+            buttons.append(Button("Comment", url=self.comment_permalink))
 
-    buttons += [
-        Button("Original Post", url=repath_url(url, permalink)),
-        Button(sub, url=repath_url(url, sub))
-    ]
+        buttons += [
+            Button("Original Post", url=self.post_permalink),
+            Button(self.sub, url=self.sub_link)
+        ]
 
-    return buttons
+        return buttons
 
 
-__all__ = ["APIReply", "RedditCommentReply", "MediaNotFoundError", "normalize_reddit_url"]
+__all__ = ["RedditLoader", "RedditCommentLoader", "REDDIT_REGEXP", "MediaNotFoundError", "normalize_reddit_url"]

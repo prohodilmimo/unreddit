@@ -10,6 +10,7 @@ from aiogram.types import Message, InlineQuery
 from aiohttp import ClientError, ClientSession
 
 from api_reply import *
+from reply import Reply
 from url_utils import find_urls, get_path
 
 
@@ -29,7 +30,7 @@ async def unreddit(trigger: Union[Message, InlineQuery]):
         return
 
     for url in find_urls(text):
-        match = APIReply.REDDIT_REGEXP.search(url)
+        match = REDDIT_REGEXP.search(url)
 
         if not match:
             continue
@@ -42,34 +43,26 @@ async def unreddit(trigger: Union[Message, InlineQuery]):
         path = [part for part in path.split("/") if part]
 
         if len(path) == 6 or len(path) == 4:  # is a link to the comment
-            try:
-                reply = RedditCommentReply(trigger)
-
-            except ValueError:
+            if not isinstance(trigger, Message):
                 continue
 
-            try:
-                await reply.attach_from_reddit_comment(url)
-                await reply.send()
-
-            except ClientError as e:
-                logging.getLogger().error(e)
-                continue
+            loader = RedditCommentLoader(trigger.bot.session)
 
         else:
-            reply = APIReply(trigger)
+            loader = RedditLoader(trigger.bot.session)
 
-            try:
-                await reply.attach_from_reddit(url)
+        try:
+            attachment, metadata = await loader.load(url)
 
-            except ClientError as e:
-                logging.getLogger().error(e)
-                continue
+        except ClientError as e:
+            logging.getLogger().error(e)
+            continue
 
-            except MediaNotFoundError:
-                continue
+        except MediaNotFoundError:
+            continue
 
-            await reply.send()
+        reply = Reply(trigger, attachment, metadata)
+        await reply.send()
 
 
 async def unr(message: Message):
@@ -110,7 +103,7 @@ def main(token: str, reddit: Dict, imgur: Dict, gfycat: Dict):
 
     dp = Dispatcher(bot)
 
-    dp.register_message_handler(unreddit, regexp=APIReply.REDDIT_REGEXP)
+    dp.register_message_handler(unreddit, regexp=REDDIT_REGEXP)
     dp.register_message_handler(unr, regexp=r"(^|\s+)r/\w+")
 
     dp.register_inline_handler(unreddit)
