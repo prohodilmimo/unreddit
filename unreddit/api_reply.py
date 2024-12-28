@@ -1,9 +1,9 @@
 import re
-from typing import Dict, Union
+from typing import Dict, List
 
-from aiogram.types import *
 from aiohttp import ClientError
 
+from content import *
 from reply import Reply
 from url_utils import repath_url, get_path
 
@@ -19,9 +19,6 @@ class APIReply(Reply):
     IMGUR_API_URL = "https://api.imgur.com"
     GFYCAT_REGEXP = re.compile(r"gfycat\.com")
     GFYCAT_API_URL = "https://api.gfycat.com"
-
-    def __init__(self, trigger: Union[Message, InlineQuery]):
-        Reply.__init__(self, trigger, None, None, "html")
 
     async def attach_from_reddit(self, url: str) -> None:
         op, comments = await self.load(normalize_reddit_url(url) + ".json")
@@ -63,9 +60,9 @@ class APIReply(Reply):
             if thumbnail:
                 thumbnail = thumbnail.replace("&amp;", "&")
 
-            self.attach_video(post_data["secure_media"]["reddit_video"]["fallback_url"],
-                              thumbnail,
-                              title)
+            self.attach_content(Video(post_data["secure_media"]["reddit_video"]["fallback_url"],
+                                      thumbnail,
+                                      title))
 
         elif is_gallery:
             media = []
@@ -81,24 +78,12 @@ class APIReply(Reply):
                     caption = item["caption"]
 
                 if image["m"] in ("image/png", "image/jpg"):
-                    media.append(
-                        InputMedia(media=image["s"]["u"].replace("&amp;", "&"),
-                                   caption=caption,
-                                   thumb=None,
-                                   type=ContentType.PHOTO)
-                    )
+                    media.append(Image(image["s"]["u"].replace("&amp;", "&"), None, caption))
 
                 elif image["m"] == "image/gif":
-                    media.append(
-                        InputMedia(media=image["s"]["u"].replace("&amp;", "&"),
-                                   caption=caption,
-                                   thumb=None,
-                                   type=ContentType.ANIMATION)
-                    )
+                    media.append(Animation(image["s"]["u"].replace("&amp;", "&"), None, caption))
 
-            self.attach_album(media,
-                              post_data["url"],
-                              title)
+            self.attach_content(Album(media, post_data["url"], title))
 
         elif post_hint == "image" or (post_hint is None and is_reddit_media):
             image_url = post_data["url"]
@@ -121,14 +106,10 @@ class APIReply(Reply):
                 thumbnail = thumbnail.replace("&amp;", "&")
 
             if is_gif:
-                self.attach_animation(image_url,
-                                      thumbnail,
-                                      title)
+                self.attach_content(Animation(image_url, thumbnail, title))
 
             else:
-                self.attach_image(image_url,
-                                  thumbnail,
-                                  title)
+                self.attach_content(Image(image_url, thumbnail, title))
 
         elif is_link_to_imgur:
             try:
@@ -137,7 +118,7 @@ class APIReply(Reply):
                 self.set_caption(title)
 
             except ClientError:
-                self.attach_link(post_data["url"], title, icon="🖼")
+                self.attach_content(Link(post_data["url"], title, icon="🖼"))
 
         elif is_link_to_gfycat:
             try:
@@ -146,19 +127,19 @@ class APIReply(Reply):
                 self.set_caption(title)
 
             except ClientError:
-                self.attach_link(post_data["url"], title, icon="🎬")
+                self.attach_content(Link(post_data["url"], title, icon="🎬"))
 
         # Video embeds
         elif post_hint == "rich:video":
             if is_nsfw:
-                self.attach_link(post_data["url"], title, icon="🔞")
+                self.attach_content(Link(post_data["url"], title, icon="🔞"))
 
             else:
-                self.attach_link(post_data["url"], title, icon="🎬")
+                self.attach_content(Link(post_data["url"], title, icon="🎬"))
 
         # Links
         elif post_hint == "link":
-            self.attach_link(post_data["url"], title)
+            self.attach_content(Link(post_data["url"], title))
 
         else:
             raise MediaNotFoundError
@@ -171,14 +152,14 @@ class APIReply(Reply):
         data = await self.load(f"{self.GFYCAT_API_URL}/v1/gfycats/{post_id}")
 
         if data["gfyItem"]["hasAudio"]:
-            self.attach_video(data["gfyItem"]["mp4Url"],
-                              data["gfyItem"]["thumb100PosterUrl"],
-                              data["gfyItem"]["title"] or None)
+            self.attach_content(Video(data["gfyItem"]["mp4Url"],
+                                      data["gfyItem"]["thumb100PosterUrl"],
+                                      data["gfyItem"]["title"] or None))
 
         else:
-            self.attach_animation(data["gfyItem"]["gifUrl"],
-                                  data["gfyItem"]["thumb100PosterUrl"],
-                                  data["gfyItem"]["title"] or None)
+            self.attach_content(Animation(data["gfyItem"]["gifUrl"],
+                                          data["gfyItem"]["thumb100PosterUrl"],
+                                          data["gfyItem"]["title"] or None))
 
     async def attach_from_imgur(self, url: str) -> None:
         path = get_path(url)
@@ -203,32 +184,15 @@ class APIReply(Reply):
                     caption = None
 
                 if image["type"] == "video/mp4":
-                    media.append(
-                        InputMedia(media=image["mp4"],
-                                   thumb=None,
-                                   type=ContentType.VIDEO,
-                                   caption=caption)
-                    )
+                    media.append(Video(image["mp4"], None, caption))
 
                 elif image["type"] == "image/gif":
-                    media.append(
-                        InputMedia(media=image["gif"],
-                                   thumb=None,
-                                   type=ContentType.ANIMATION,
-                                   caption=caption)
-                    )
+                    media.append(Animation(image["gif"], None, caption))
 
                 elif image["type"] in ("image/png", "image/jpeg"):
-                    media.append(
-                        InputMedia(media=image["link"],
-                                   thumb=None,
-                                   type=ContentType.PHOTO,
-                                   caption=caption)
-                    )
+                    media.append(Image(image["link"], None, caption))
 
-            self.attach_album(media,
-                              url,
-                              data["data"]["title"] or None)
+            self.attach_content(Album(media, url, data["data"]["title"] or None))
 
         else:
             post_id, *_ = path[1:].split(".")
@@ -236,35 +200,23 @@ class APIReply(Reply):
             data = await self.load(f"{self.IMGUR_API_URL}/3/image/{post_id}")
 
             if data["data"]["type"] == "video/mp4":
-                self.attach_video(data["data"]["mp4"],
-                                  None,
-                                  data["data"]["title"] or None)
+                self.attach_content(Video(data["data"]["mp4"], None, data["data"]["title"] or None))
 
             elif data["data"]["type"] == "image/gif":
-                self.attach_video(data["data"]["mp4"],
-                                  None,
-                                  data["data"]["title"] or None)
+                self.attach_content(Video(data["data"]["mp4"], None, data["data"]["title"] or None))
 
             elif data["data"]["type"] in ("image/png", "image/jpeg"):
-                self.attach_image(data["data"]["link"],
-                                  None,
-                                  data["data"]["title"] or None)
+                self.attach_content(Image(data["data"]["link"], None, data["data"]["title"] or None))
 
 
 class RedditCommentReply(Reply):
-    def __init__(self, trigger: Union[Message, InlineQuery]):
-        if not isinstance(trigger, Message):
-            raise ValueError
-
-        Reply.__init__(self, trigger, None, None, "markdown")
-
     async def attach_from_reddit_comment(self, url):
         op, comments = await self.load(normalize_reddit_url(url) + ".json")
 
         post_data = op["data"]["children"][0]["data"]
         comment_data = comments["data"]["children"][0]["data"]
 
-        self.attach_text(comment_data["body"])
+        self.attach_content(Text(comment_data["body"], "markdown"))
         self.set_reply_markup(generate_reddit_buttons(url, post_data, comment_data))
 
 
@@ -273,7 +225,7 @@ def normalize_reddit_url(url: str) -> str:
 
 
 def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
-                            ) -> InlineKeyboardMarkup:
+                            ) -> List[Button]:
     permalink = post_data["permalink"]
     sub = post_data["subreddit_name_prefixed"]
     author = "u/" + post_data["author"]
@@ -284,14 +236,14 @@ def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
         author = "u/" + comment_data["author"]
         comment_permalink = comment_data["permalink"]
 
-        buttons.append(InlineKeyboardButton("Comment", url=repath_url(url, comment_permalink)))
+        buttons.append(Button("Comment", url=repath_url(url, comment_permalink)))
 
     buttons += [
-        InlineKeyboardButton("Original Post", url=repath_url(url, permalink)),
-        InlineKeyboardButton(sub, url=repath_url(url, sub))
+        Button("Original Post", url=repath_url(url, permalink)),
+        Button(sub, url=repath_url(url, sub))
     ]
 
-    return InlineKeyboardMarkup().add(*buttons)
+    return buttons
 
 
 __all__ = ["APIReply", "RedditCommentReply", "MediaNotFoundError", "normalize_reddit_url"]
