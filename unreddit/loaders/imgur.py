@@ -1,5 +1,5 @@
 import re
-from typing import Tuple
+from typing import Tuple, Optional
 
 from content import *
 from url_utils import get_path
@@ -9,53 +9,68 @@ IMGUR_REGEXP = re.compile(r"imgur\.com")
 IMGUR_API_URL = "https://api.imgur.com"
 
 
+def _from_gallery_item(image) -> Optional[Media]:
+    if image["title"] and image["description"]:
+        caption = f"{image['title']}\n\n{image['description']}"
+
+    elif image["title"]:
+        caption = image["title"]
+
+    elif image["description"]:
+        caption = image["description"]
+
+    else:
+        caption = None
+
+    if image["type"] == "video/mp4":
+        return Video(image["mp4"], None, caption)
+
+    elif image["type"] == "image/gif":
+        return Animation(image["gif"], None, caption)
+
+    elif image["type"] in ("image/png", "image/jpeg"):
+        return Image(image["link"], None, caption)
+
+
 class ImgurLoader(ContentLoader):
     async def load(self, url: str) -> Tuple[Content, Metadata]:
         path = get_path(url)
 
         if re.match(r"/gallery/\w+", path):
             *_, post_id = path.split("/")
+
             data = await self._load(f"{IMGUR_API_URL}/3/album/{post_id}")
 
+            title = data["data"]["title"] or None
             media = []
 
             for image in data["data"]["images"]:
-                if image["title"] and image["description"]:
-                    caption = f"{image['title']}\n\n{image['description']}"
+                item = _from_gallery_item(image)
 
-                elif image["title"]:
-                    caption = image["title"]
+                if item is not None:
+                    media.append(item)
 
-                elif image["description"]:
-                    caption = image["description"]
-
-                else:
-                    caption = None
-
-                if image["type"] == "video/mp4":
-                    media.append(Video(image["mp4"], None, caption))
-
-                elif image["type"] == "image/gif":
-                    media.append(Animation(image["gif"], None, caption))
-
-                elif image["type"] in ("image/png", "image/jpeg"):
-                    media.append(Image(image["link"], None, caption))
-
-            return Album(media, url, data["data"]["title"] or None), Metadata()
+            return Album(media, url, title), ImgurMetadata()
 
         else:
             post_id, *_ = path[1:].split(".")
 
             data = await self._load(f"{IMGUR_API_URL}/3/image/{post_id}")
 
+            title = data["data"]["title"] or None
+
             if data["data"]["type"] == "video/mp4":
-                return Video(data["data"]["mp4"], None, data["data"]["title"] or None), Metadata()
+                return Video(data["data"]["mp4"], None, title), ImgurMetadata()
 
             elif data["data"]["type"] == "image/gif":
-                return Video(data["data"]["mp4"], None, data["data"]["title"] or None), Metadata()
+                return Video(data["data"]["mp4"], None, title), ImgurMetadata()
 
             elif data["data"]["type"] in ("image/png", "image/jpeg"):
-                return Image(data["data"]["link"], None, data["data"]["title"] or None), Metadata()
+                return Image(data["data"]["link"], None, title), ImgurMetadata()
+
+
+class ImgurMetadata(Metadata):
+    pass
 
 
 __all__ = ["IMGUR_REGEXP", "ImgurLoader"]

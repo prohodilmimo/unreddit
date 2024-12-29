@@ -10,33 +10,36 @@ from aiogram.utils.exceptions import BadRequest
 from content import *
 
 
+def _to_keyboard_markup(metadata: Metadata) -> InlineKeyboardMarkup:
+    markup = InlineKeyboardMarkup()
+
+    for button in metadata.get_buttons():
+        markup.add(InlineKeyboardButton(button.text, url=button.url))
+
+    return markup
+
+
+
 class Reply:
-    @staticmethod
-    def _to_keyboard_markup(metadata: Metadata) -> InlineKeyboardMarkup:
-        markup = InlineKeyboardMarkup()
-
-        for button in metadata.get_buttons():
-            markup.add(InlineKeyboardButton(button.text, url=button.url))
-
-        return markup
-
     def __init__(self, trigger: Union[Message, InlineQuery],
                  content: Content,
                  metadata: Metadata):
 
         self.__trigger = trigger
         self.__content = content
-        self.__reply_markup = self._to_keyboard_markup(metadata)
+        self.__metadata = metadata
 
     async def send(self):
         if isinstance(self.__trigger, Message):
-            await _send_message(self.__trigger, self.__content, self.__reply_markup)
+            await _send_message(self.__trigger, self.__content, self.__metadata)
 
         elif isinstance(self.__trigger, InlineQuery) and isinstance(self.__content, Media):
-            await _send_inline(self.__trigger, self.__content, self.__reply_markup)
+            await _send_inline(self.__trigger, self.__content, self.__metadata)
 
 
-async def _send_message(message: Message, content: Content, reply_markup: InlineKeyboardMarkup):
+async def _send_message(message: Message, content: Content, metadata: Metadata):
+    reply_markup = _to_keyboard_markup(metadata)
+
     try:
         if isinstance(content, Text):
             await message.reply(content.payload,
@@ -81,7 +84,8 @@ async def _send_message(message: Message, content: Content, reply_markup: Inline
                                         f"has failed to embed: {e}")
 
 
-async def _send_inline(query: InlineQuery, content: Media, reply_markup: InlineKeyboardMarkup):
+async def _send_inline(query: InlineQuery, content: Media, metadata: Metadata):
+    reply_markup = _to_keyboard_markup(metadata)
     results = []
 
     if isinstance(content, Album):

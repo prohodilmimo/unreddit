@@ -17,16 +17,17 @@ class GfyCatLoader(ContentLoader):
 
         data = await self._load(f"{GFYCAT_API_URL}/v1/gfycats/{post_id}")
 
+        title = data["gfyItem"]["title"] or None
+        thumbnail_url = data["gfyItem"]["thumb100PosterUrl"]
+
         if data["gfyItem"]["hasAudio"]:
-            return Video(data["gfyItem"]["mp4Url"],
-                         data["gfyItem"]["thumb100PosterUrl"],
-                         data["gfyItem"]["title"] or None), \
-                Metadata()
+            return Video(data["gfyItem"]["mp4Url"], thumbnail_url, title), GfyCatMetadata()
         else:
-            return Animation(data["gfyItem"]["gifUrl"],
-                             data["gfyItem"]["thumb100PosterUrl"],
-                             data["gfyItem"]["title"] or None), \
-                Metadata()
+            return Animation(data["gfyItem"]["gifUrl"], thumbnail_url, title), GfyCatMetadata()
+
+
+class GfyCatMetadata(Metadata):
+    pass
 
 
 __all__ = ["GFYCAT_REGEXP", "GfyCatLoader"]

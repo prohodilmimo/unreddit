@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 from aiohttp import ClientError
 
@@ -61,82 +61,19 @@ class RedditLoader(ContentLoader):
             raise MediaNotFoundError
 
         if is_video:
-            try:
-                thumbnail = post_data["preview"]["images"][0]["resolutions"][0]["url"]
-            except (IndexError, KeyError):
-                pass
-
-            if thumbnail:
-                thumbnail = thumbnail.replace("&amp;", "&")
-
-            return Video(post_data["secure_media"]["reddit_video"]["fallback_url"], thumbnail, title), metadata
+            return self.get_video(post_data, title, thumbnail), metadata
 
         elif is_gallery:
-            media = []
-
-            for item in post_data["gallery_data"]["items"]:
-                image = post_data["media_metadata"][item["media_id"]]
-                caption = None
-
-                if image["status"] != "valid":
-                    continue
-
-                if item["caption"]:
-                    caption = item["caption"]
-
-                if image["m"] in ("image/png", "image/jpg"):
-                    media.append(Image(image["s"]["u"].replace("&amp;", "&"), None, caption))
-
-                elif image["m"] == "image/gif":
-                    media.append(Animation(image["s"]["u"].replace("&amp;", "&"), None, caption))
-
-            return Album(media, post_data["url"], title), metadata
+            return self.get_gallery(post_data, title), metadata
 
         elif post_hint == "image" or (post_hint is None and is_reddit_media):
-            image_url = post_data["url"]
-
-            is_gif = re.search(r"\.gif", image_url, re.I)
-
-            if post_hint is not None and is_gif:
-                image_url = post_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"]
-
-            elif post_hint is not None:
-                image_url = post_data["preview"]["images"][0]["source"]["url"]
-                try:
-                    thumbnail = post_data["preview"]["images"][0]["resolutions"][0]["url"]
-                except (IndexError, KeyError):
-                    pass
-
-            image_url = image_url.replace("&amp;", "&")
-
-            if thumbnail:
-                thumbnail = thumbnail.replace("&amp;", "&")
-
-            if is_gif:
-                return Animation(image_url, thumbnail, title), metadata
-
-            else:
-                return Image(image_url, thumbnail, title), metadata
+            return self.get_image(post_data, title, thumbnail, post_hint), metadata
 
         elif is_link_to_imgur:
-            try:
-                content, _ = await ImgurLoader(parent=self).load(post_data['url'])
-
-                content.caption = title
-                return content, metadata
-
-            except ClientError:
-                return Link(post_data["url"], title, icon="🎬"), metadata
+            return await self.get_imgur_content(post_data, title), metadata
 
         elif is_link_to_gfycat:
-            try:
-                content, _ = await GfyCatLoader(parent=self).load(post_data['url'])
-
-                content.caption = title
-                return content, metadata
-
-            except ClientError:
-                return Link(post_data["url"], title, icon="🖼"), metadata
+            return await self.get_gfycat_content(post_data, title), metadata
 
         # Video embeds
         elif post_hint == "rich:video":
@@ -159,6 +96,84 @@ class RedditLoader(ContentLoader):
 
         else:
             raise MediaNotFoundError
+
+    def get_video(self, post_data, title, thumbnail):
+        try:
+            thumbnail = post_data["preview"]["images"][0]["resolutions"][0]["url"]
+        except (IndexError, KeyError):
+            pass
+
+        if thumbnail:
+            thumbnail = thumbnail.replace("&amp;", "&")
+
+        return Video(post_data["secure_media"]["reddit_video"]["fallback_url"], thumbnail, title)
+
+    def get_gallery(self, post_data, title) -> Album:
+        media = []
+
+        for item in post_data["gallery_data"]["items"]:
+            image = post_data["media_metadata"][item["media_id"]]
+            caption = None
+
+            if image["status"] != "valid":
+                continue
+
+            if item["caption"]:
+                caption = item["caption"]
+
+            if image["m"] in ("image/png", "image/jpg"):
+                media.append(Image(image["s"]["u"].replace("&amp;", "&"), None, caption))
+
+            elif image["m"] == "image/gif":
+                media.append(Animation(image["s"]["u"].replace("&amp;", "&"), None, caption))
+
+        return Album(media, post_data["url"], title)
+
+    def get_image(self, post_data, title, thumbnail, post_hint) -> Union[Image, Animation]:
+        image_url = post_data["url"]
+
+        is_gif = re.search(r"\.gif", image_url, re.I)
+
+        if post_hint is not None and is_gif:
+            image_url = post_data["preview"]["images"][0]["variants"]["gif"]["source"]["url"]
+
+        elif post_hint is not None:
+            image_url = post_data["preview"]["images"][0]["source"]["url"]
+            try:
+                thumbnail = post_data["preview"]["images"][0]["resolutions"][0]["url"]
+            except (IndexError, KeyError):
+                pass
+
+        image_url = image_url.replace("&amp;", "&")
+
+        if thumbnail:
+            thumbnail = thumbnail.replace("&amp;", "&")
+
+        if is_gif:
+            return Animation(image_url, thumbnail, title)
+
+        else:
+            return Image(image_url, thumbnail, title)
+
+    async def get_gfycat_content(self, post_data, title):
+        try:
+            content, _ = await GfyCatLoader(parent=self).load(post_data['url'])
+
+            content.caption = title
+            return content
+
+        except ClientError:
+            return Link(post_data["url"], title, icon="🎬")
+
+    async def get_imgur_content(self, post_data, title):
+        try:
+            content, _ = await ImgurLoader(parent=self).load(post_data['url'])
+
+            content.caption = title
+            return content
+
+        except ClientError:
+            return Link(post_data["url"], title, icon="🖼")
 
 
 class RedditMetadata(Metadata):
