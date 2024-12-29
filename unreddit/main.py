@@ -2,30 +2,17 @@ import logging
 import os
 import re
 from typing import Dict, Union
-from urllib.parse import urlsplit
 
 import ujson
 import uvloop
 from aiogram import Bot, Dispatcher, executor
 from aiogram.types import Message, InlineQuery
-from aiohttp import ClientError, ClientSession
+from aiohttp import ClientError
 
-from api_reply import *
-
-
-def get_urls(text: str) -> str:
-    urls = re.findall(
-        "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
-        text
-    )
-
-    for url in urls:
-        yield url
-
-
-async def resolve_opaque_share_url(session: ClientSession, url: str) -> str:
-    async with session.head(normalize_reddit_url(url), raise_for_status=True, allow_redirects=False) as response:
-        return response.headers.get("Location")
+from loaders.loader import MediaNotFoundError
+from loaders.reddit import REDDIT_REGEXP, RedditLoader
+from reply import Reply
+from url_utils import find_urls
 
 
 async def unreddit(trigger: Union[Message, InlineQuery]):
@@ -38,48 +25,21 @@ async def unreddit(trigger: Union[Message, InlineQuery]):
     else:
         return
 
-    for url in get_urls(text):
-        match = APIReply.REDDIT_REGEXP.search(url)
+    for url in find_urls(text):
+        loader = RedditLoader(trigger.bot.session)
 
-        if not match:
+        try:
+            attachment, metadata = await loader.load(url)
+
+        except ClientError as e:
+            logging.getLogger().error(e)
             continue
 
-        if 's' in match.groups():  # is an opaque share link
-            url = await resolve_opaque_share_url(trigger.bot.session, url)
+        except MediaNotFoundError:
+            continue
 
-        scheme, netloc, path, *_ = urlsplit(url)
-
-        path = [part for part in path.split("/") if part]
-
-        if len(path) == 6 or len(path) == 4:  # is a link to the comment
-            try:
-                reply = RedditCommentReply(trigger)
-
-            except ValueError:
-                continue
-
-            try:
-                await reply.attach_from_reddit_comment(url)
-                await reply.send()
-
-            except ClientError as e:
-                logging.getLogger().error(e)
-                continue
-
-        else:
-            reply = APIReply(trigger)
-
-            try:
-                await reply.attach_from_reddit(url)
-
-            except ClientError as e:
-                logging.getLogger().error(e)
-                continue
-
-            except MediaNotFoundError:
-                continue
-
-            await reply.send()
+        reply = Reply(trigger, attachment, metadata)
+        await reply.send()
 
 
 async def unr(message: Message):
@@ -120,7 +80,7 @@ def main(token: str, reddit: Dict, imgur: Dict, gfycat: Dict):
 
     dp = Dispatcher(bot)
 
-    dp.register_message_handler(unreddit, regexp=APIReply.REDDIT_REGEXP)
+    dp.register_message_handler(unreddit, regexp=REDDIT_REGEXP)
     dp.register_message_handler(unr, regexp=r"(^|\s+)r/\w+")
 
     dp.register_inline_handler(unreddit)

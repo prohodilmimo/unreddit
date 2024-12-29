@@ -179,7 +179,7 @@ async def test_image(reddit_mock_server, chat, bot):
         message = get_message(chat, post_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = 'Caaterpillar'
@@ -211,7 +211,7 @@ async def test_gif(reddit_mock_server, chat, bot):
         message = get_message(chat, post_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = 'Flag of sweden but Jesus died of a bad apple'
@@ -247,7 +247,7 @@ async def test_video(reddit_mock_server, chat, bot):
         message = get_message(chat, post_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = 'ʸᵃʷⁿ'
@@ -282,7 +282,7 @@ async def test_link(reddit_mock_server, chat, bot):
         message = get_message(chat, post_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     link_url = "https://www.motorsport.com/f1/news/rwanda-to-meet-f1-bosses-next-month-to-discuss-serious-grand-prix-bid/10642881/"
@@ -314,7 +314,7 @@ async def test_gallery(reddit_mock_server, chat, bot):
         message = get_message(chat, post_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = 'For 13 year old game, it sure is stunning visuals...'
@@ -363,7 +363,7 @@ async def test_comment(reddit_mock_server, chat, bot):
         message = get_message(chat, share_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     post_permalink = "https://www.reddit.com/r/ShitpostXIV/comments/1hl0gyj/breaking_news_in_response_to_the_people/"
@@ -398,7 +398,7 @@ async def test_crosspost(reddit_mock_server, chat, bot):
         message = get_message(chat, share_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = "How the heck am I supposed to play this?"
@@ -431,8 +431,8 @@ async def test_imgur_video(reddit_mock_server, imgur_mock_server, chat, bot):
         message = get_message(chat, post_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
-             patch("api_reply.APIReply.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
+             patch("loaders.imgur.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
             await unreddit(message)
 
     caption = 'Giving a fennec fox a bath'
@@ -468,8 +468,8 @@ async def test_imgur_gallery(reddit_mock_server, imgur_mock_server, chat, bot):
         message = get_message(chat, post_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
-             patch("api_reply.APIReply.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
+             patch("loaders.imgur.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
             await unreddit(message)
 
     caption = "Fire Force's Princess Hibana wallpaper series [1920x1080] (stills from latest episode, mild spoilers inside)"
@@ -518,7 +518,7 @@ async def test_fallback(reddit_mock_server, imgur_mock_server, chat, bot):
         message = get_message(chat, post_url)
 
         with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("api_reply.APIReply.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     attachment_url = "https://v.redd.it/gfhrkwfbs7341/DASH_1080?source=fallback"
