@@ -14,10 +14,9 @@ def _to_keyboard_markup(metadata: Metadata) -> InlineKeyboardMarkup:
     markup = InlineKeyboardMarkup()
 
     for button in metadata.get_buttons():
-        markup.add(InlineKeyboardButton(button.text, url=button.url))
+        markup.insert(InlineKeyboardButton(button.text, url=button.url))
 
     return markup
-
 
 
 class Reply:
