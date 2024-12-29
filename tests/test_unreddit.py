@@ -1,4 +1,5 @@
 import json
+from itertools import zip_longest
 from random import randint
 from typing import Dict, List
 from unittest.mock import Mock, patch, AsyncMock, ANY
@@ -56,14 +57,14 @@ class InlineKeyboardMarkupMock(object):
         if isinstance(other, InlineKeyboardMarkup):
             return all(
                 self_button == other_button
-                for self_row, other_row in zip(self.inline_keyboard, other.inline_keyboard)
-                for self_button, other_button in zip(self_row, other_row)
+                for self_row, other_row in zip_longest(self.inline_keyboard, other.inline_keyboard)
+                for self_button, other_button in zip_longest(self_row, other_row)
             )
         elif isinstance(other, InlineKeyboardMarkupMock):
             return all(
                 self_button == other_button
-                for self_row, other_row in zip(self.inline_keyboard, other.inline_keyboard)
-                for self_button, other_button in zip(self_row, other_row)
+                for self_row, other_row in zip_longest(self.inline_keyboard, other.inline_keyboard)
+                for self_button, other_button in zip_longest(self_row, other_row)
             )
         return False
 
@@ -71,14 +72,14 @@ class InlineKeyboardMarkupMock(object):
         if isinstance(other, InlineKeyboardMarkup):
             return any(
                 self_button != other_button
-                for self_row, other_row in zip(self.inline_keyboard, other.inline_keyboard)
-                for self_button, other_button in zip(self_row, other_row)
+                for self_row, other_row in zip_longest(self.inline_keyboard, other.inline_keyboard)
+                for self_button, other_button in zip_longest(self_row, other_row)
             )
         elif isinstance(other, InlineKeyboardMarkupMock):
             return any(
                 self_button != other_button
-                for self_row, other_row in zip(self.inline_keyboard, other.inline_keyboard)
-                for self_button, other_button in zip(self_row, other_row)
+                for self_row, other_row in zip_longest(self.inline_keyboard, other.inline_keyboard)
+                for self_button, other_button in zip_longest(self_row, other_row)
             )
         return True
 
