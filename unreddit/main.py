@@ -2,7 +2,6 @@ import logging
 import os
 import re
 from typing import Dict, Union
-from urllib.parse import urlsplit
 
 import ujson
 import uvloop
@@ -11,16 +10,7 @@ from aiogram.types import Message, InlineQuery
 from aiohttp import ClientError, ClientSession
 
 from api_reply import *
-
-
-def get_urls(text: str) -> str:
-    urls = re.findall(
-        "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
-        text
-    )
-
-    for url in urls:
-        yield url
+from url_utils import find_urls, get_path
 
 
 async def resolve_opaque_share_url(session: ClientSession, url: str) -> str:
@@ -38,7 +28,7 @@ async def unreddit(trigger: Union[Message, InlineQuery]):
     else:
         return
 
-    for url in get_urls(text):
+    for url in find_urls(text):
         match = APIReply.REDDIT_REGEXP.search(url)
 
         if not match:
@@ -47,7 +37,7 @@ async def unreddit(trigger: Union[Message, InlineQuery]):
         if 's' in match.groups():  # is an opaque share link
             url = await resolve_opaque_share_url(trigger.bot.session, url)
 
-        scheme, netloc, path, *_ = urlsplit(url)
+        path = get_path(url)
 
         path = [part for part in path.split("/") if part]
 

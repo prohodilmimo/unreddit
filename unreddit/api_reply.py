@@ -1,11 +1,11 @@
 import re
 from typing import Dict, Union
-from urllib.parse import urlsplit, urlunsplit
 
 from aiogram.types import *
 from aiohttp import ClientError
 
 from reply import Reply
+from url_utils import repath_url, get_path
 
 
 class MediaNotFoundError(Exception):
@@ -18,7 +18,7 @@ class APIReply(Reply):
     IMGUR_REGEXP = re.compile(r"imgur\.com")
     IMGUR_API_URL = "https://api.imgur.com"
     GFYCAT_REGEXP = re.compile(r"gfycat\.com")
-    GFYCAT_API_URL = 'https://api.gfycat.com'
+    GFYCAT_API_URL = "https://api.gfycat.com"
 
     def __init__(self, trigger: Union[Message, InlineQuery]):
         Reply.__init__(self, trigger, None, None, "html")
@@ -110,8 +110,10 @@ class APIReply(Reply):
 
             elif post_hint is not None:
                 image_url = post_data["preview"]["images"][0]["source"]["url"]
-                if post_data["preview"]["images"][0]["resolutions"]:
+                try:
                     thumbnail = post_data["preview"]["images"][0]["resolutions"][0]["url"]
+                except (IndexError, KeyError):
+                    pass
 
             image_url = image_url.replace("&amp;", "&")
 
@@ -162,7 +164,7 @@ class APIReply(Reply):
             raise MediaNotFoundError
 
     async def attach_from_gfycat(self, url: str) -> None:
-        scheme, netloc, path, *_ = urlsplit(url)
+        path = get_path(url)
 
         post_id, *_ = path[1:].split("-")
 
@@ -179,7 +181,7 @@ class APIReply(Reply):
                                   data["gfyItem"]["title"] or None)
 
     async def attach_from_imgur(self, url: str) -> None:
-        scheme, netloc, path, *_ = urlsplit(url)
+        path = get_path(url)
 
         if re.match(r"/gallery/\w+", path):
             *_, post_id = path.split("/")
@@ -267,35 +269,27 @@ class RedditCommentReply(Reply):
 
 
 def normalize_reddit_url(url: str) -> str:
-    _, _, path, *_ = urlsplit(url)
-    scheme, netloc, *_ = urlsplit(APIReply.REDDIT_API_URL)
-    return f"{urlunsplit((scheme, netloc, path, None, None))}"
+    return repath_url(APIReply.REDDIT_API_URL, get_path(url))
 
 
 def generate_reddit_buttons(url: str, post_data: Dict, comment_data: Dict = None
                             ) -> InlineKeyboardMarkup:
-    scheme, netloc, path, *_ = urlsplit(url)
-
     permalink = post_data["permalink"]
     sub = post_data["subreddit_name_prefixed"]
+    author = "u/" + post_data["author"]
 
-    if comment_data is None:
-        author = "u/" + post_data["author"]
+    buttons = []
 
-        buttons = [
-            InlineKeyboardButton("Original Post", url=urlunsplit((scheme, netloc, permalink, None, None))),
-            InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None)))
-        ]
-
-    else:
-        comment_permalink = comment_data["permalink"]
+    if comment_data is not None:
         author = "u/" + comment_data["author"]
+        comment_permalink = comment_data["permalink"]
 
-        buttons = [
-            InlineKeyboardButton("Comment",       url=urlunsplit((scheme, netloc, comment_permalink, None, None))),
-            InlineKeyboardButton("Original Post", url=urlunsplit((scheme, netloc, permalink, None, None))),
-            InlineKeyboardButton(sub,             url=urlunsplit((scheme, netloc, sub, None, None)))
-        ]
+        buttons.append(InlineKeyboardButton("Comment", url=repath_url(url, comment_permalink)))
+
+    buttons += [
+        InlineKeyboardButton("Original Post", url=repath_url(url, permalink)),
+        InlineKeyboardButton(sub, url=repath_url(url, sub))
+    ]
 
     return InlineKeyboardMarkup().add(*buttons)
 
