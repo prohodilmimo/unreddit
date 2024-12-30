@@ -118,7 +118,7 @@ class RedditLoader(ContentLoader):
             if image["status"] != "valid":
                 continue
 
-            if item["caption"]:
+            if "caption" in item and item["caption"]:
                 caption = item["caption"]
 
             if image["m"] in ("image/png", "image/jpg"):
