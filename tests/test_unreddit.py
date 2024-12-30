@@ -1,13 +1,12 @@
 import json
 from itertools import zip_longest
-from random import randint
 from typing import Dict, List
-from unittest.mock import Mock, patch, AsyncMock, ANY
+from unittest.mock import Mock, patch, AsyncMock
 from urllib.parse import unquote
 
 import pytest
 from aiogram import Bot
-from aiogram.types import Message, Chat, InputMedia, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import Message, InputMedia, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.exceptions import BadRequest
 from aiohttp import web, ClientSession
 from aiohttp.web_request import Request
@@ -16,36 +15,38 @@ from pytest_aiohttp.plugin import aiohttp_server
 
 from unreddit.main import unreddit
 
-MESSAGE_ID = randint(1, 1000)
+MESSAGES = []
 SHARE_MAP = {}
 
 
 @pytest.fixture
-def bot(chat):
+def bot():
     bot = Mock(spec=Bot)
-    bot.send_message = AsyncMock(side_effect=lambda **kwargs: get_message(chat))
-    bot.send_photo = AsyncMock(side_effect=lambda **kwargs: get_message(chat))
-    bot.send_video = AsyncMock(side_effect=lambda **kwargs: get_message(chat))
-    bot.send_animation = AsyncMock(side_effect=lambda *args, **kwargs: get_message(chat))
-    bot.send_media_group = AsyncMock(side_effect=lambda chat_id, media, **kwargs: [get_message(chat) for _ in media])
     return bot
 
 
-@pytest.fixture
-def chat():
-    chat = Mock(spec=Chat)
-    chat.id = randint(1, 1000)
-    return chat
+@pytest.fixture(autouse=True)
+def set_up():
+    global MESSAGES
+    MESSAGES = []
 
 
-def get_message(chat, text=None):
-    message = Message()
-    global MESSAGE_ID
-    message.message_id = MESSAGE_ID
-    MESSAGE_ID += 1
-    message.chat = chat
+def get_message(bot=None, text=None):
+    message = Mock(spec=Message)
+    message.reply = AsyncMock(side_effect=lambda *args, **kwargs: get_message())
+    message.reply_photo = AsyncMock(side_effect=lambda *args, **kwargs: get_message())
+    message.reply_video = AsyncMock(side_effect=lambda *args, **kwargs: get_message())
+    message.reply_animation = AsyncMock(side_effect=lambda *args, **kwargs: get_message())
+    message.reply_media_group = AsyncMock(side_effect=lambda media, **kwargs: [get_message() for _ in media])
+
+    if bot:
+        message.bot = bot
+
     if text:
         message.text = text
+
+    global MESSAGES
+    MESSAGES.append(message)
     return message
 
 
@@ -171,16 +172,15 @@ def imgur_mock_server(aiohttp_server):
 
 
 @pytest.mark.asyncio
-async def test_image(reddit_mock_server, chat, bot):
+async def test_image(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/ProperAnimalNames/comments/eakgxt/caaterpillar/"
 
     reddit_server = await reddit_mock_server
     async with ClientSession() as session:
         bot.session = session
-        message = get_message(chat, post_url)
+        message = get_message(bot, post_url)
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = 'Caaterpillar'
@@ -191,28 +191,23 @@ async def test_image(reddit_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_photo,
-        chat_id=message.chat.id,
+        message.reply_photo,
+        attachment_url,
         caption=caption,
-        disable_notification=ANY,
-        parse_mode=ANY,
-        photo=attachment_url,
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id
+        reply_markup=buttons
     )
 
 
 @pytest.mark.asyncio
-async def test_gif(reddit_mock_server, chat, bot):
+async def test_gif(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/vexillologycirclejerk/comments/1hatfow/flag_of_sweden_but_jesus_died_of_a_bad_apple/"
 
     reddit_server = await reddit_mock_server
     async with ClientSession() as session:
         bot.session = session
-        message = get_message(chat, post_url)
+        message = get_message(bot, post_url)
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = 'Flag of sweden but Jesus died of a bad apple'
@@ -223,32 +218,23 @@ async def test_gif(reddit_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_animation,
-        message.chat.id,
+        message.reply_animation,
+        attachment_url,
         caption=caption,
-        disable_notification=ANY,
-        duration=ANY,
-        width=ANY,
-        height=ANY,
-        thumb=ANY,
-        parse_mode=ANY,
-        animation=attachment_url,
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id
+        reply_markup=buttons
     )
 
 
 @pytest.mark.asyncio
-async def test_video(reddit_mock_server, chat, bot):
+async def test_video(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/aww/comments/eafg2x/%CA%B8%E1%B5%83%CA%B7%E2%81%BF/"
 
     reddit_server = await reddit_mock_server
     async with ClientSession() as session:
         bot.session = session
-        message = get_message(chat, post_url)
+        message = get_message(bot, post_url)
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = 'ʸᵃʷⁿ'
@@ -259,31 +245,23 @@ async def test_video(reddit_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_video,
-        chat_id=message.chat.id,
+        message.reply_video,
+        attachment_url,
         caption=caption,
-        disable_notification=ANY,
-        duration=ANY,
-        width=ANY,
-        height=ANY,
-        parse_mode=ANY,
-        video=attachment_url,
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id
+        reply_markup=buttons
     )
 
 
 @pytest.mark.asyncio
-async def test_link(reddit_mock_server, chat, bot):
+async def test_link(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/formula1/comments/1en284q/rwanda_to_meet_f1_bosses_next_month_to_discuss/"
 
     reddit_server = await reddit_mock_server
     async with ClientSession() as session:
         bot.session = session
-        message = get_message(chat, post_url)
+        message = get_message(bot, post_url)
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     link_url = "https://www.motorsport.com/f1/news/rwanda-to-meet-f1-bosses-next-month-to-discuss-serious-grand-prix-bid/10642881/"
@@ -294,28 +272,23 @@ async def test_link(reddit_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_message,
-        chat_id=message.chat.id,
-        disable_notification=ANY,
-        disable_web_page_preview=ANY,
-        text=text,
+        message.reply,
+        text,
         parse_mode='html',
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id
+        reply_markup=buttons
     )
 
 
 @pytest.mark.asyncio
-async def test_gallery(reddit_mock_server, chat, bot):
+async def test_gallery(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/masseffect/comments/ioubvj/for_13_year_old_game_it_sure_is_stunning_visuals/"
 
     reddit_server = await reddit_mock_server
     async with ClientSession() as session:
         bot.session = session
-        message = get_message(chat, post_url)
+        message = get_message(bot, post_url)
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = 'For 13 year old game, it sure is stunning visuals...'
@@ -333,27 +306,21 @@ async def test_gallery(reddit_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_media_group,
-        message.chat.id,
-        media=attachments,
-        disable_notification=ANY,
-        reply_to_message_id=message.message_id
+        message.reply_media_group,
+        attachments
     )
 
     Mock.assert_called_with(
-        bot.send_message,
-        chat_id=message.chat.id,
-        disable_notification=ANY,
-        disable_web_page_preview=ANY,
-        text=caption,
-        parse_mode=ANY,
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id + 1
+        MESSAGES[1].reply,
+        caption,
+        reply_markup=buttons
     )
+
+    assert len(MESSAGES) == 5
 
 
 @pytest.mark.asyncio
-async def test_comment(reddit_mock_server, chat, bot):
+async def test_comment(reddit_mock_server, bot):
     share_url = "https://www.reddit.com/r/ShitpostXIV/s/7qTY1lb9Dc/"
     comment_url = "https://www.reddit.com/r/ShitpostXIV/comments/1hl0gyj/breaking_news_in_response_to_the_people/m3ij6ht/"
     SHARE_MAP["7qTY1lb9Dc"] = comment_url
@@ -361,10 +328,9 @@ async def test_comment(reddit_mock_server, chat, bot):
     reddit_server = await reddit_mock_server
     async with ClientSession() as session:
         bot.session = session
-        message = get_message(chat, share_url)
+        message = get_message(bot, share_url)
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     post_permalink = "https://www.reddit.com/r/ShitpostXIV/comments/1hl0gyj/breaking_news_in_response_to_the_people/"
@@ -376,19 +342,15 @@ async def test_comment(reddit_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_message,
-        chat_id=message.chat.id,
-        disable_notification=ANY,
-        disable_web_page_preview=ANY,
-        text=text,
-        parse_mode=ANY,
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id
+        message.reply,
+        text,
+        parse_mode="markdown",
+        reply_markup=buttons
     )
 
 
 @pytest.mark.asyncio
-async def test_crosspost(reddit_mock_server, chat, bot):
+async def test_crosspost(reddit_mock_server, bot):
     share_url = "https://www.reddit.com/r/badukshitposting/s/auJDBZLHYO/"
     post_url = "https://www.reddit.com/r/badukshitposting/comments/1hbq2co/how_the_heck_am_i_supposed_to_play_this/"
     SHARE_MAP["auJDBZLHYO"] = post_url
@@ -396,10 +358,9 @@ async def test_crosspost(reddit_mock_server, chat, bot):
     reddit_server = await reddit_mock_server
     async with ClientSession() as session:
         bot.session = session
-        message = get_message(chat, share_url)
+        message = get_message(bot, share_url)
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     caption = "How the heck am I supposed to play this?"
@@ -410,29 +371,24 @@ async def test_crosspost(reddit_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_photo,
-        chat_id=message.chat.id,
+        message.reply_photo,
+        attachment_url,
         caption=caption,
-        disable_notification=ANY,
-        parse_mode=ANY,
-        photo=attachment_url,
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id
+        reply_markup=buttons
     )
 
 
 @pytest.mark.asyncio
-async def test_imgur_video(reddit_mock_server, imgur_mock_server, chat, bot):
+async def test_imgur_video(reddit_mock_server, imgur_mock_server, bot):
     post_url = "https://www.reddit.com/r/aww/comments/aie643/giving_a_fennec_fox_a_bath/"
 
     reddit_server = await reddit_mock_server
     imgur_server = await imgur_mock_server
     async with (ClientSession() as session):
         bot.session = session
-        message = get_message(chat, post_url)
+        message = get_message(bot, post_url)
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
              patch("loaders.imgur.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
             await unreddit(message)
 
@@ -444,32 +400,24 @@ async def test_imgur_video(reddit_mock_server, imgur_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_video,
-        chat_id=message.chat.id,
+        message.reply_video,
+        attachment_url,
         caption=caption,
-        disable_notification=ANY,
-        duration=ANY,
-        width=ANY,
-        height=ANY,
-        parse_mode=ANY,
-        video=attachment_url,
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id
+        reply_markup=buttons
     )
 
 
 @pytest.mark.asyncio
-async def test_imgur_gallery(reddit_mock_server, imgur_mock_server, chat, bot):
+async def test_imgur_gallery(reddit_mock_server, imgur_mock_server, bot):
     post_url = "https://www.reddit.com/r/firebrigade/comments/dxhrr1/fire_forces_princess_hibana_wallpaper_series/"
 
     reddit_server = await reddit_mock_server
     imgur_server = await imgur_mock_server
     async with (ClientSession() as session):
         bot.session = session
-        message = get_message(chat, post_url)
+        message = get_message(bot, post_url)
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
              patch("loaders.imgur.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
             await unreddit(message)
 
@@ -489,37 +437,30 @@ async def test_imgur_gallery(reddit_mock_server, imgur_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_media_group,
-        message.chat.id,
-        media=attachments,
-        disable_notification=ANY,
-        reply_to_message_id=message.message_id
+        message.reply_media_group,
+        attachments
     )
 
     Mock.assert_called_with(
-        bot.send_message,
-        chat_id=message.chat.id,
-        disable_notification=ANY,
-        disable_web_page_preview=ANY,
-        text=caption,
-        parse_mode=ANY,
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id + 1
+        MESSAGES[1].reply,
+        caption,
+        reply_markup=buttons
     )
+
+    assert len(MESSAGES) == 9
 
 
 @pytest.mark.asyncio
-async def test_fallback(reddit_mock_server, imgur_mock_server, chat, bot):
+async def test_fallback(reddit_mock_server, imgur_mock_server, bot):
     post_url = "https://www.reddit.com/r/Animemes/comments/e7eno4/mob_chuuni_200_op_chuunibyou_x_mob_psycho_100/"
 
     reddit_server = await reddit_mock_server
     async with (ClientSession() as session):
         bot.session = session
-        bot.send_video = AsyncMock(side_effect=BadRequest("Mock Error"))
-        message = get_message(chat, post_url)
+        message = get_message(bot, post_url)
+        message.reply_video = AsyncMock(side_effect=BadRequest("Mock Error"))
 
-        with patch("aiogram.types.base.TelegramObject.bot", bot), \
-             patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
+        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
             await unreddit(message)
 
     attachment_url = "https://v.redd.it/gfhrkwfbs7341/DASH_1080?source=fallback"
@@ -532,12 +473,8 @@ async def test_fallback(reddit_mock_server, imgur_mock_server, chat, bot):
     ]])
 
     Mock.assert_called_with(
-        bot.send_message,
-        chat_id=message.chat.id,
-        disable_notification=ANY,
-        disable_web_page_preview=ANY,
-        text=text,
+        message.reply,
+        text,
         parse_mode='html',
-        reply_markup=buttons,
-        reply_to_message_id=message.message_id
+        reply_markup=buttons
     )
