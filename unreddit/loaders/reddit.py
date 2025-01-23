@@ -1,4 +1,5 @@
 import re
+from os import getenv
 from typing import Dict, List, Tuple, Union
 
 from aiohttp import ClientError
@@ -10,13 +11,20 @@ from .imgur import IMGUR_REGEXP, ImgurLoader
 from .loader import ContentLoader, MediaNotFoundError
 
 REDDIT_REGEXP = re.compile(r"reddit\.com(/(r|u|user)/\w+/|/)(comments|s)")
-REDDIT_API_URL = "https://www.reddit.com"
+REDDIT_API_URL_DEFAULT = "https://www.reddit.com"
+REDDIT_API_URL_KEY = "REDDIT_API_URL"
 
 
 class RedditLoader(ContentLoader):
     def is_comment_url(self, url):
         path = [part for part in get_path(url).split("/") if part]
         return len(path) == 6 or len(path) == 4
+
+    def get_api_url(self):
+        return getenv(REDDIT_API_URL_KEY, REDDIT_API_URL_DEFAULT)
+
+    def get_headers(self):
+        return {"User-agent": getenv("REDDIT_USER_AGENT")}
 
     async def load(self, url: str) -> Tuple[Content, Metadata]:
         match = REDDIT_REGEXP.search(url)
@@ -29,7 +37,7 @@ class RedditLoader(ContentLoader):
 
         is_comment = self.is_comment_url(url)
 
-        op, comments = await self._load(repath_url(REDDIT_API_URL, get_path(url)) + ".json")
+        op, comments = await self._load(repath_url(self.get_api_url(), get_path(url)) + ".json")
 
         post_data = op["data"]["children"][0]["data"]
 

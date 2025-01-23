@@ -9,7 +9,7 @@ Author's implementation: [@unreddit_bot](https://t.me/unreddit_bot).
 
 #### Prerequisites
 
-* Python 3.6+
+* Python 3.9+
 * pipenv
 * Telegram bot API token
 
@@ -20,13 +20,19 @@ pip install pipenv && \
 pipenv install
 ```
 
+#### Environment configuration
+
+| Variable           | Type   | Description                                                                                                                                                                                                                                                                           |
+|--------------------|--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| TELEGRAM_BOT_TOKEN | String | Bot's own token for interfacing with Telegram                                                                                                                                                                                                                                         |
+| REDDIT_USER_AGENT  | String | `User-Agent` header value [required](https://github.com/reddit-archive/reddit/wiki/API) for API-like requests to Reddit to not get them banned                                                                                                                                        |
+| IMGUR_CLIENT_ID    | String | Client Id to use for requests to Imgur (effectively mandatory for getting content from Reddit). Requires an Imgur account.<br/>Will be injected into API requests to Imgur as a part of the value of `Authorization` header.<br/>i.e. `"Authorization": "Client-ID $IMGUR_CLIENT_ID"` |
+
+
 #### Execution
 
-**NB:** before launching, set your bot API token and desired 
-request User-agent header value ([required](https://github.com/reddit-archive/reddit/wiki/API) by Reddit) in the [config](unreddit/config.json) file.
-
 ```bash
-pipenv run main
+TELEGRAM_BOT_TOKEN="secret" REDDIT_USER_AGENT="My awesome bot" IMGUR_CLIENT_ID="also secret" pipenv run main
 ```
 
 Since this bot is designed to react to the links shared in the group chats,

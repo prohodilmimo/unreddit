@@ -1,7 +1,8 @@
 import json
+import os
 from itertools import zip_longest
 from typing import Dict, List
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, AsyncMock
 from urllib.parse import unquote
 
 import pytest
@@ -13,10 +14,16 @@ from aiohttp.web_request import Request
 from aiohttp.web_response import Response
 from pytest_aiohttp.plugin import aiohttp_server
 
+from loaders.imgur import IMGUR_API_URL_KEY
+from loaders.reddit import REDDIT_API_URL_KEY
 from unreddit.main import unreddit
 
 MESSAGES = []
 SHARE_MAP = {}
+
+
+def setenv(key: str, value: str) -> None:
+    os.environ[key] = value
 
 
 @pytest.fixture
@@ -176,12 +183,13 @@ async def test_image(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/ProperAnimalNames/comments/eakgxt/caaterpillar/"
 
     reddit_server = await reddit_mock_server
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
+
     async with ClientSession() as session:
         bot.session = session
         message = get_message(bot, post_url)
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     caption = 'Caaterpillar'
     attachment_url = "https://preview.redd.it/x0jro2c32m441.jpg?auto=webp&s=7a26ed39ddb092ca26299ce2be0dcffd6c8800d9"
@@ -203,12 +211,13 @@ async def test_gif(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/vexillologycirclejerk/comments/1hatfow/flag_of_sweden_but_jesus_died_of_a_bad_apple/"
 
     reddit_server = await reddit_mock_server
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
+
     async with ClientSession() as session:
         bot.session = session
         message = get_message(bot, post_url)
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     caption = 'Flag of sweden but Jesus died of a bad apple'
     attachment_url = "https://preview.redd.it/h7n07ag96y5e1.gif?s=80759c90c117bfbb2ee5dfc3c1d986802de50a64"
@@ -230,18 +239,19 @@ async def test_video(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/aww/comments/eafg2x/%CA%B8%E1%B5%83%CA%B7%E2%81%BF/"
 
     reddit_server = await reddit_mock_server
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
+
     async with ClientSession() as session:
         bot.session = session
         message = get_message(bot, post_url)
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     caption = 'ʸᵃʷⁿ'
     attachment_url = "https://v.redd.it/w8qualuy4j441/DASH_720?source=fallback"
-    buttons = InlineKeyboardMarkupMock([[
-        InlineKeyboardButtonMock(url=unquote(post_url), text="Original Post"),
-        InlineKeyboardButtonMock(url="https://www.reddit.com/r/aww", text="r/aww")
+    buttons = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(url=unquote(post_url), text="Original Post"),
+        InlineKeyboardButton(url="https://www.reddit.com/r/aww", text="r/aww")
     ]])
 
     Mock.assert_called_with(
@@ -257,12 +267,13 @@ async def test_link(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/formula1/comments/1en284q/rwanda_to_meet_f1_bosses_next_month_to_discuss/"
 
     reddit_server = await reddit_mock_server
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
+
     async with ClientSession() as session:
         bot.session = session
         message = get_message(bot, post_url)
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     link_url = "https://www.motorsport.com/f1/news/rwanda-to-meet-f1-bosses-next-month-to-discuss-serious-grand-prix-bid/10642881/"
     text = f'<a href="{link_url}">🔗</a> Rwanda to meet F1 bosses next month to discuss “serious” Grand Prix bid'
@@ -284,12 +295,13 @@ async def test_gallery(reddit_mock_server, bot):
     post_url = "https://www.reddit.com/r/masseffect/comments/ioubvj/for_13_year_old_game_it_sure_is_stunning_visuals/"
 
     reddit_server = await reddit_mock_server
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
+
     async with ClientSession() as session:
         bot.session = session
         message = get_message(bot, post_url)
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     caption = 'For 13 year old game, it sure is stunning visuals...'
     attachments = [
@@ -326,12 +338,13 @@ async def test_comment(reddit_mock_server, bot):
     SHARE_MAP["7qTY1lb9Dc"] = comment_url
 
     reddit_server = await reddit_mock_server
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
+
     async with ClientSession() as session:
         bot.session = session
         message = get_message(bot, share_url)
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     post_permalink = "https://www.reddit.com/r/ShitpostXIV/comments/1hl0gyj/breaking_news_in_response_to_the_people/"
     text = "This was mildly amusing as a comment on the big post; as a standalone post it's not very good."
@@ -356,12 +369,13 @@ async def test_crosspost(reddit_mock_server, bot):
     SHARE_MAP["auJDBZLHYO"] = post_url
 
     reddit_server = await reddit_mock_server
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
+
     async with ClientSession() as session:
         bot.session = session
         message = get_message(bot, share_url)
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     caption = "How the heck am I supposed to play this?"
     attachment_url = "https://preview.redd.it/ps319gqzt36e1.png?auto=webp&s=ce817f1c5c0c57b2fc0b8908a378f1c0b9ab3864"
@@ -383,14 +397,15 @@ async def test_imgur_video(reddit_mock_server, imgur_mock_server, bot):
     post_url = "https://www.reddit.com/r/aww/comments/aie643/giving_a_fennec_fox_a_bath/"
 
     reddit_server = await reddit_mock_server
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
     imgur_server = await imgur_mock_server
+    setenv(IMGUR_API_URL_KEY, f"{imgur_server.make_url('')}")
+
     async with (ClientSession() as session):
         bot.session = session
         message = get_message(bot, post_url)
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
-             patch("loaders.imgur.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     caption = 'Giving a fennec fox a bath'
     attachment_url = "https://i.imgur.com/r8v9NAI.mp4"
@@ -412,14 +427,15 @@ async def test_imgur_gallery(reddit_mock_server, imgur_mock_server, bot):
     post_url = "https://www.reddit.com/r/firebrigade/comments/dxhrr1/fire_forces_princess_hibana_wallpaper_series/"
 
     reddit_server = await reddit_mock_server
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
     imgur_server = await imgur_mock_server
+    setenv(IMGUR_API_URL_KEY, f"{imgur_server.make_url('')}")
+
     async with (ClientSession() as session):
         bot.session = session
         message = get_message(bot, post_url)
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"), \
-             patch("loaders.imgur.IMGUR_API_URL", f"{imgur_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     caption = "Fire Force's Princess Hibana wallpaper series [1920x1080] (stills from latest episode, mild spoilers inside)"
     attachments = [
@@ -455,13 +471,14 @@ async def test_fallback(reddit_mock_server, imgur_mock_server, bot):
     post_url = "https://www.reddit.com/r/Animemes/comments/e7eno4/mob_chuuni_200_op_chuunibyou_x_mob_psycho_100/"
 
     reddit_server = await reddit_mock_server
-    async with (ClientSession() as session):
+    setenv(REDDIT_API_URL_KEY, f"{reddit_server.make_url('')}")
+
+    async with ClientSession() as session:
         bot.session = session
         message = get_message(bot, post_url)
         message.reply_video = AsyncMock(side_effect=BadRequest("Mock Error"))
 
-        with patch("loaders.reddit.REDDIT_API_URL", f"{reddit_server.make_url('')}"):
-            await unreddit(message)
+        await unreddit(message)
 
     attachment_url = "https://v.redd.it/gfhrkwfbs7341/DASH_1080?source=fallback"
     text = (f'<a href="{attachment_url}">🎬 Mob Chuuni 200 OP (Chuunibyou X Mob Psycho 100)</a>\n'

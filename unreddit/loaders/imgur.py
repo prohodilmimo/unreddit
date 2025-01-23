@@ -1,4 +1,5 @@
 import re
+from os import getenv
 from typing import Tuple, Optional
 
 from content import *
@@ -6,7 +7,8 @@ from url_utils import get_path
 from .loader import ContentLoader
 
 IMGUR_REGEXP = re.compile(r"imgur\.com")
-IMGUR_API_URL = "https://api.imgur.com"
+IMGUR_API_URL_DEFAULT = "https://api.imgur.com"
+IMGUR_API_URL_KEY = "IMGUR_API_URL"
 
 
 def _from_gallery_item(image) -> Optional[Media]:
@@ -33,13 +35,19 @@ def _from_gallery_item(image) -> Optional[Media]:
 
 
 class ImgurLoader(ContentLoader):
+    def get_api_url(self) -> str:
+        return getenv(IMGUR_API_URL_KEY, IMGUR_API_URL_DEFAULT)
+
+    def get_headers(self):
+        return {"Authorization": f"Client-ID {getenv('IMGUR_CLIENT_ID')}"}
+
     async def load(self, url: str) -> Tuple[Content, Metadata]:
         path = get_path(url)
 
         if re.match(r"/gallery/\w+", path):
             *_, post_id = path.split("/")
 
-            data = await self._load(f"{IMGUR_API_URL}/3/album/{post_id}")
+            data = await self._load(f"{self.get_api_url()}/3/album/{post_id}")
 
             title = data["data"]["title"] or None
             media = []
@@ -55,7 +63,7 @@ class ImgurLoader(ContentLoader):
         else:
             post_id, *_ = path[1:].split(".")
 
-            data = await self._load(f"{IMGUR_API_URL}/3/image/{post_id}")
+            data = await self._load(f"{self.get_api_url()}/3/image/{post_id}")
 
             title = data["data"]["title"] or None
 

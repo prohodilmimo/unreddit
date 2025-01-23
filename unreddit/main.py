@@ -1,10 +1,8 @@
 import logging
-import os
 import re
-from typing import Dict, Union
+from os import getenv
+from typing import Union
 
-import ujson
-import uvloop
 from aiogram import Bot, Dispatcher, executor
 from aiogram.types import Message, InlineQuery
 from aiohttp import ClientError
@@ -68,15 +66,10 @@ async def unr(message: Message):
                             disable_web_page_preview=True)
 
 
-def main(token: str, reddit: Dict, imgur: Dict, gfycat: Dict):
+def main():
     logging.basicConfig(level=logging.INFO)
 
-    bot = Bot(token=token)
-    headers = reddit["headers"]
-
-    headers["Authorization"] = f"Client-ID {imgur.get('client_id')}"
-
-    bot.session._default_headers = headers
+    bot = Bot(token=getenv("TELEGRAM_BOT_TOKEN"))
 
     dp = Dispatcher(bot)
 
@@ -89,12 +82,4 @@ def main(token: str, reddit: Dict, imgur: Dict, gfycat: Dict):
 
 
 if __name__ == '__main__':
-    uvloop.install()
-
-    config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                               "config.json")
-
-    with open(config_path, "r") as config_file:
-        config = ujson.load(config_file)
-
-    main(**config)
+    main()
