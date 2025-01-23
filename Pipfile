@@ -5,6 +5,7 @@ verify_ssl = true
 
 [dev-packages]
 pytest-aiohttp = "*"
+pytest-dotenv = "*"
 
 [packages]
 aiogram = "==2.4"
